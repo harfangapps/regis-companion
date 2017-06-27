@@ -1,0 +1,6 @@
+# Apple finder hidden file
+.DS_Store
+
+# Redis dump files
+dump.rdb
+

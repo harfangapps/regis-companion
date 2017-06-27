@@ -1,0 +1,12 @@
+# TODOs
+
+* Listen only on local/loopback interface by default (127.0.0.1)
+* Check what permissions the unix sockets should have
+* Hash of remote/server addresses for unix socket, or that makes it predictable so unsafe?
+* Subcommand to register itself as launchd service, confirm executable location (or test if absolute path is necessary)
+* Have a good, simple update flow
+* Use context.Context everywhere
+* Use timeouts to close idle connections after a while
+* Clean-up any resource on exit
+* Test logging via launchd, seems to output in /var/log/system.log?
+* Expvars exported via a command for introspection
