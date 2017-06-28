@@ -75,6 +75,7 @@ func (t *Tunnel) ListenAndServe() error {
 func (t *Tunnel) Close() error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	select {
 	case <-t.done:
 		// already closed
@@ -96,6 +97,11 @@ func (t *Tunnel) Close() error {
 // this makes it possible to test with a Listener that fails to accept.
 func (t *Tunnel) serve(l net.Listener) error {
 	defer l.Close()
+
+	t.mu.Lock()
+	t.done = make(chan struct{})
+	t.listener = l
+	t.mu.Unlock()
 
 	var delay time.Duration
 	for {
