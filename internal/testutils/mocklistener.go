@@ -1,6 +1,9 @@
 package testutils
 
-import "net"
+import (
+	"net"
+	"sync"
+)
 
 var _ net.Listener = (*MockListener)(nil)
 
@@ -12,22 +15,43 @@ type MockListener struct {
 	AcceptFunc func(i int) (net.Conn, error)
 	// Error to return when Close is called on the Listener.
 	CloseErr error
+	// If set, this channel is closed when Close is called.
+	CloseChan chan struct{}
 	// Address to return when Addr is called on the Listener.
 	Address net.Addr
 
+	mu          sync.Mutex // protects close(CloseChan) and acceptIndex
 	acceptIndex int
 }
 
 func (l *MockListener) AcceptCalls() int {
-	return l.acceptIndex
+	l.mu.Lock()
+	i := l.acceptIndex
+	l.mu.Unlock()
+	return i
 }
 
 func (l *MockListener) Accept() (net.Conn, error) {
-	defer func() { l.acceptIndex += 1 }()
-	return l.AcceptFunc(l.acceptIndex)
+	l.mu.Lock()
+	i := l.acceptIndex
+	l.acceptIndex += 1
+	l.mu.Unlock()
+
+	return l.AcceptFunc(i)
 }
 
 func (l *MockListener) Close() error {
+	l.mu.Lock()
+	if l.CloseChan != nil {
+		select {
+		case <-l.CloseChan:
+			// already closed
+		default:
+			close(l.CloseChan)
+		}
+	}
+	l.mu.Unlock()
+
 	return l.CloseErr
 }
 

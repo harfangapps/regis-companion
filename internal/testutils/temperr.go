@@ -1,14 +1,23 @@
 package testutils
 
-// TempErr is an error that implements the Temporary method.
-var TempErr tempErr = "temporary error"
+import "fmt"
 
-type tempErr string
+var (
+	// ErrTemporaryTrue is an error that implements a Temporary method
+	// that always returns true.
+	ErrTemporaryTrue tempErr = true
+
+	// ErrTemporaryFalse is an error that implements a Temporary method
+	// that always returns false.
+	ErrTemporaryFalse tempErr = false
+)
+
+type tempErr bool
 
 func (e tempErr) Temporary() bool {
-	return true
+	return bool(e)
 }
 
 func (e tempErr) Error() string {
-	return string(e)
+	return fmt.Sprintf("temporary error %t", bool(e))
 }
