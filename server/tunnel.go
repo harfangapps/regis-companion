@@ -141,6 +141,20 @@ func (t *Tunnel) serve(l net.Listener) error {
 func (t *Tunnel) forward(local net.Conn) {
 	defer local.Close()
 
+	// acquire the lock, as wg.Add is racy with wg.Wait in Tunnel.Close.
+	t.mu.Lock()
+	select {
+	case <-t.done:
+		// was closed while waiting on the lock, exit
+		t.mu.Unlock()
+		return
+	default:
+		// is definitely not closed and not `wg.Wait`ing
+		t.wg.Add(1)
+		defer t.wg.Done()
+	}
+	t.mu.Unlock()
+
 	// SSH connect to the server
 	server, err := sshDialFn(t.Server.Network(), t.Server.String(), t.Config)
 	if err != nil {
