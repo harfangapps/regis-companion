@@ -24,9 +24,31 @@ type MockConn struct {
 	// Remote address to return when RemoteAddr is called.
 	RemoteAddress net.Addr
 
-	mu         sync.Mutex // protects close(CloseChan) and the read/write indices
+	mu         sync.Mutex // protects close(CloseChan) and the indices
 	readIndex  int
 	writeIndex int
+	closeIndex int
+}
+
+func (c *MockConn) CloseCalls() int {
+	c.mu.Lock()
+	i := c.closeIndex
+	c.mu.Unlock()
+	return i
+}
+
+func (c *MockConn) ReadCalls() int {
+	c.mu.Lock()
+	i := c.readIndex
+	c.mu.Unlock()
+	return i
+}
+
+func (c *MockConn) WriteCalls() int {
+	c.mu.Lock()
+	i := c.writeIndex
+	c.mu.Unlock()
+	return i
 }
 
 func (c *MockConn) Read(b []byte) (int, error) {
@@ -55,6 +77,7 @@ func (c *MockConn) Close() error {
 			close(c.CloseChan)
 		}
 	}
+	c.closeIndex += 1
 	c.mu.Unlock()
 	return c.CloseErr
 }

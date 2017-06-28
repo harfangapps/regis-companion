@@ -52,6 +52,9 @@ type Tunnel struct {
 	listener net.Listener
 	done     chan struct{}
 	closeErr error
+
+	// wg waits for copyBytes goroutines to exit
+	wg sync.WaitGroup
 }
 
 // ListenAndServe sets up the Tunnel by connecting via
@@ -90,6 +93,13 @@ func (t *Tunnel) Close() error {
 		close(t.done)
 		// then close the listener, which will trigger the rest
 		t.closeErr = t.listener.Close()
+		// wait for goroutines to exit cleanly
+		t.wg.Wait()
+		// can now close the ErrChan safely
+		if t.ErrChan != nil {
+			close(t.ErrChan)
+		}
+
 		return t.closeErr
 	}
 }
@@ -147,21 +157,25 @@ func (t *Tunnel) forward(local net.Conn) {
 	}
 	defer remote.Close()
 
-	wg := &sync.WaitGroup{}
-	wg.Add(2)
-	go t.copyBytes(wg, local, remote)
-	go t.copyBytes(wg, remote, local)
+	// acquire the lock, as wg.Add is racy with wg.Wait in Tunnel.Close.
+	t.mu.Lock()
+	select {
+	case <-t.done:
+		// was closed while waiting on the lock, will exit
+	default:
+		// is definitely not closed and not `wg.Wait`ing
+		t.wg.Add(2)
+		go t.copyBytes(local, remote)
+		go t.copyBytes(remote, local)
+	}
+	t.mu.Unlock()
 
 	// block waiting for the Close signal
 	<-t.done
-	// close signal received, close the local connection
-	local.Close()
-	// wait for copyBytes goroutines to exit
-	wg.Wait()
 }
 
-func (t *Tunnel) copyBytes(wg *sync.WaitGroup, dst io.Writer, src io.Reader) {
-	defer wg.Done()
+func (t *Tunnel) copyBytes(dst io.Writer, src io.Reader) {
+	defer t.wg.Done()
 
 	if _, err := io.Copy(dst, src); err != nil {
 		err = errors.Wrap(err, "copy bytes error")

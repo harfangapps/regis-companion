@@ -20,13 +20,21 @@ type MockListener struct {
 	// Address to return when Addr is called on the Listener.
 	Address net.Addr
 
-	mu          sync.Mutex // protects close(CloseChan) and acceptIndex
+	mu          sync.Mutex // protects close(CloseChan) and the indices
 	acceptIndex int
+	closeIndex  int
 }
 
 func (l *MockListener) AcceptCalls() int {
 	l.mu.Lock()
 	i := l.acceptIndex
+	l.mu.Unlock()
+	return i
+}
+
+func (l *MockListener) CloseCalls() int {
+	l.mu.Lock()
+	i := l.closeIndex
 	l.mu.Unlock()
 	return i
 }
@@ -50,6 +58,7 @@ func (l *MockListener) Close() error {
 			close(l.CloseChan)
 		}
 	}
+	l.closeIndex += 1
 	l.mu.Unlock()
 
 	return l.CloseErr
