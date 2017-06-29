@@ -18,8 +18,8 @@ var (
 	// ErrMissingCRLF is returned if a \r\n is missing in the data slice.
 	ErrMissingCRLF = errors.New("resp: missing CRLF")
 
-	// ErrInvalidInteger is returned if an invalid character is found while parsing an integer.
-	ErrInvalidInteger = errors.New("resp: invalid integer character")
+	// ErrInvalidInteger is returned if an invalid value is found while parsing an integer.
+	ErrInvalidInteger = errors.New("resp: invalid integer value")
 
 	// ErrInvalidBulkString is returned if the bulk string data cannot be decoded.
 	ErrInvalidBulkString = errors.New("resp: invalid bulk string")
@@ -37,16 +37,14 @@ var (
 )
 
 const (
-	defaultMaxLine   = 4096      // 4KB
+	//defaultMaxLine   = 4096      // 4KB
 	defaultMaxLength = 512 << 20 // 512MB
+	defaultMaxDigits = 20        // int64 = 19 digits + sign
 )
 
 // Decoder decodes values received by an io.Reader.
 type Decoder struct {
 	r         *bufio.Reader
-	buf       bytes.Buffer
-	limit     io.LimitedReader
-	maxLine   int
 	maxLength int
 }
 
@@ -54,7 +52,6 @@ type Decoder struct {
 func NewDecoder(r io.Reader) *Decoder {
 	dec := &Decoder{
 		r:         bufferedReader(r),
-		maxLine:   defaultMaxLine,
 		maxLength: defaultMaxLength,
 	}
 	return dec
@@ -171,8 +168,6 @@ func (d *Decoder) decodeArray() (Array, error) {
 		// Invalid length
 		return nil, ErrInvalidArray
 
-		// TODO: cnt > 512MB
-
 	default:
 		// Allocate the array
 		ar := make(Array, cnt)
@@ -205,26 +200,21 @@ func (d *Decoder) decodeBulkString() (interface{}, error) {
 	case cnt < -1:
 		return nil, ErrInvalidBulkString
 
-		// TODO: cnt > 512MB
+	case cnt > int64(d.maxLength):
+		return nil, ErrInvalidBulkString
 
 	default:
 		// Then the string is cnt long, and bytes read is cnt+n+2 (for ending CRLF)
 		need := cnt + 2
-		got := 0
 		// TODO: reuse scratch space instead
 		buf := make([]byte, need)
-		// TODO: use io.ReadFull
-		for {
-			nb, err := d.r.Read(buf[got:])
-			if err != nil {
-				return nil, err
-			}
-			got += nb
-			if int64(got) == need {
-				break
-			}
+		if _, err := io.ReadFull(d.r, buf); err != nil {
+			return nil, err
 		}
-		return string(buf[:got-2]), err
+		if buf[len(buf)-2] != '\r' || buf[len(buf)-1] != '\n' {
+			return nil, ErrMissingCRLF
+		}
+		return string(buf[:len(buf)-2]), nil
 	}
 }
 
@@ -237,13 +227,14 @@ func (d *Decoder) decodeInteger() (val int64, err error) {
 
 loop:
 	for {
-		// TODO: limit to n characters (int64 + sign)
-
 		ch, err := d.r.ReadByte()
 		if err != nil {
 			return 0, err
 		}
 		n++
+		if n > defaultMaxDigits {
+			return 0, ErrInvalidInteger
+		}
 
 		switch ch {
 		case '\r':
@@ -262,6 +253,7 @@ loop:
 				continue
 			}
 			fallthrough
+
 		default:
 			return 0, ErrInvalidInteger
 		}
@@ -270,11 +262,10 @@ loop:
 	if !cr {
 		return 0, ErrMissingCRLF
 	}
-	// Presume next byte was \n
-	// TODO: do not presume
-	_, err = d.r.ReadByte()
-	if err != nil {
+	if ch, err := d.r.ReadByte(); err != nil {
 		return 0, err
+	} else if ch != '\n' {
+		return 0, ErrMissingCRLF
 	}
 	return sign * val, nil
 }
@@ -282,16 +273,16 @@ loop:
 // decodeSimpleString decodes the byte slice as a SimpleString. The
 // '+' prefix is assumed to be already consumed.
 func (d *Decoder) decodeSimpleString() (interface{}, error) {
-	// TODO: use limit reader
+	// TODO: limit bytes read
 	v, err := d.r.ReadBytes('\r')
 	if err != nil {
 		return nil, err
 	}
-	// Presume next byte was \n
-	// TODO: do not presume
-	_, err = d.r.ReadByte()
-	if err != nil {
+
+	if ch, err := d.r.ReadByte(); err != nil {
 		return nil, err
+	} else if ch != '\n' {
+		return nil, ErrMissingCRLF
 	}
 	return string(v[:len(v)-1]), nil
 }
