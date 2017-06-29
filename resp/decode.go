@@ -4,6 +4,7 @@
 package resp
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -35,12 +36,35 @@ var (
 	ErrInvalidRequest = errors.New("resp: invalid request, must be an array of bulk strings with at least one element")
 )
 
-// BytesReader defines the methods required for the Decode* family of methods.
-// Notably, a *bufio.Reader and a *bytes.Buffer both satisfy this interface.
-type BytesReader interface {
-	io.Reader
-	io.ByteReader
-	ReadBytes(byte) ([]byte, error)
+const (
+	defaultMaxLine   = 4096      // 4KB
+	defaultMaxLength = 512 << 20 // 512MB
+)
+
+// Decoder decodes values received by an io.Reader.
+type Decoder struct {
+	r         *bufio.Reader
+	buf       bytes.Buffer
+	limit     io.LimitedReader
+	maxLine   int
+	maxLength int
+}
+
+// NewDecoder returns a new Decoder that reads values from r.
+func NewDecoder(r io.Reader) *Decoder {
+	dec := &Decoder{
+		r:         bufferedReader(r),
+		maxLine:   defaultMaxLine,
+		maxLength: defaultMaxLength,
+	}
+	return dec
+}
+
+func bufferedReader(r io.Reader) *bufio.Reader {
+	if br, ok := r.(*bufio.Reader); ok {
+		return br
+	}
+	return bufio.NewReader(r)
 }
 
 // Array represents an array of values, as defined by the RESP.
@@ -58,9 +82,9 @@ func (a Array) String() string {
 // DecodeRequest decodes the provided byte slice and returns the array
 // representing the request. If the encoded value is not an array, it
 // returns ErrNotAnArray, and if it is not a valid request, it returns ErrInvalidRequest.
-func DecodeRequest(r BytesReader) ([]string, error) {
+func (d *Decoder) DecodeRequest() ([]string, error) {
 	// Decode the value, must be an array
-	val, err := decodeValue(r, true)
+	val, err := d.decodeValue(true)
 	if err != nil {
 		return nil, err
 	}
@@ -87,14 +111,14 @@ func DecodeRequest(r BytesReader) ([]string, error) {
 }
 
 // Decode decodes the provided byte slice and returns the parsed value.
-func Decode(r BytesReader) (interface{}, error) {
-	return decodeValue(r, false)
+func (d *Decoder) Decode() (interface{}, error) {
+	return d.decodeValue(false)
 }
 
 // decodeValue parses the byte slice and decodes the value based on its
 // prefix, as defined by the RESP protocol.
-func decodeValue(r BytesReader, requiresArray bool) (interface{}, error) {
-	ch, err := r.ReadByte()
+func (d *Decoder) decodeValue(requiresArray bool) (interface{}, error) {
+	ch, err := d.r.ReadByte()
 	if err != nil {
 		return nil, err
 	}
@@ -106,19 +130,19 @@ func decodeValue(r BytesReader, requiresArray bool) (interface{}, error) {
 	switch ch {
 	case '+':
 		// Simple string
-		val, err = decodeSimpleString(r)
+		val, err = d.decodeSimpleString()
 	case '-':
 		// Error
-		val, err = decodeError(r)
+		val, err = d.decodeError()
 	case ':':
 		// Integer
-		val, err = decodeInteger(r)
+		val, err = d.decodeInteger()
 	case '$':
 		// Bulk string
-		val, err = decodeBulkString(r)
+		val, err = d.decodeBulkString()
 	case '*':
 		// Array
-		val, err = decodeArray(r)
+		val, err = d.decodeArray()
 	default:
 		err = ErrInvalidPrefix
 	}
@@ -128,9 +152,9 @@ func decodeValue(r BytesReader, requiresArray bool) (interface{}, error) {
 
 // decodeArray decodes the byte slice as an array. It assumes the
 // '*' prefix is already consumed.
-func decodeArray(r BytesReader) (Array, error) {
+func (d *Decoder) decodeArray() (Array, error) {
 	// First comes the number of elements in the array
-	cnt, err := decodeInteger(r)
+	cnt, err := d.decodeInteger()
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +179,7 @@ func decodeArray(r BytesReader) (Array, error) {
 
 		// Decode each value
 		for i := 0; i < int(cnt); i++ {
-			val, err := decodeValue(r, false)
+			val, err := d.decodeValue(false)
 			if err != nil {
 				return nil, err
 			}
@@ -167,9 +191,9 @@ func decodeArray(r BytesReader) (Array, error) {
 
 // decodeBulkString decodes the byte slice as a binary-safe string. The
 // '$' prefix is assumed to be already consumed.
-func decodeBulkString(r BytesReader) (interface{}, error) {
+func (d *Decoder) decodeBulkString() (interface{}, error) {
 	// First comes the length of the bulk string, an integer
-	cnt, err := decodeInteger(r)
+	cnt, err := d.decodeInteger()
 	if err != nil {
 		return nil, err
 	}
@@ -189,8 +213,9 @@ func decodeBulkString(r BytesReader) (interface{}, error) {
 		got := 0
 		// TODO: reuse scratch space instead
 		buf := make([]byte, need)
+		// TODO: use io.ReadFull
 		for {
-			nb, err := r.Read(buf[got:])
+			nb, err := d.r.Read(buf[got:])
 			if err != nil {
 				return nil, err
 			}
@@ -205,7 +230,7 @@ func decodeBulkString(r BytesReader) (interface{}, error) {
 
 // decodeInteger decodes the byte slice as a singed 64bit integer. The
 // ':' prefix is assumed to be already consumed.
-func decodeInteger(r BytesReader) (val int64, err error) {
+func (d *Decoder) decodeInteger() (val int64, err error) {
 	var cr bool
 	var sign int64 = 1
 	var n int
@@ -214,7 +239,7 @@ loop:
 	for {
 		// TODO: limit to n characters (int64 + sign)
 
-		ch, err := r.ReadByte()
+		ch, err := d.r.ReadByte()
 		if err != nil {
 			return 0, err
 		}
@@ -246,7 +271,8 @@ loop:
 		return 0, ErrMissingCRLF
 	}
 	// Presume next byte was \n
-	_, err = r.ReadByte()
+	// TODO: do not presume
+	_, err = d.r.ReadByte()
 	if err != nil {
 		return 0, err
 	}
@@ -255,13 +281,15 @@ loop:
 
 // decodeSimpleString decodes the byte slice as a SimpleString. The
 // '+' prefix is assumed to be already consumed.
-func decodeSimpleString(r BytesReader) (interface{}, error) {
-	v, err := r.ReadBytes('\r')
+func (d *Decoder) decodeSimpleString() (interface{}, error) {
+	// TODO: use limit reader
+	v, err := d.r.ReadBytes('\r')
 	if err != nil {
 		return nil, err
 	}
 	// Presume next byte was \n
-	_, err = r.ReadByte()
+	// TODO: do not presume
+	_, err = d.r.ReadByte()
 	if err != nil {
 		return nil, err
 	}
@@ -270,6 +298,6 @@ func decodeSimpleString(r BytesReader) (interface{}, error) {
 
 // decodeError decodes the byte slice as an Error. The '-' prefix
 // is assumed to be already consumed.
-func decodeError(r BytesReader) (interface{}, error) {
-	return decodeSimpleString(r)
+func (d *Decoder) decodeError() (interface{}, error) {
+	return d.decodeSimpleString()
 }

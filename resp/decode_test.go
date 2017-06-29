@@ -79,7 +79,7 @@ var decodeRequestCases = []struct {
 
 func TestDecode(t *testing.T) {
 	for i, c := range append(decodeValidCases, decodeErrCases...) {
-		got, err := Decode(bytes.NewBuffer(c.enc))
+		got, err := NewDecoder(bytes.NewReader(c.enc)).Decode()
 		if err != c.err {
 			t.Errorf("%d: expected error %v, got %v", i, c.err, err)
 		}
@@ -92,8 +92,7 @@ func TestDecode(t *testing.T) {
 
 func TestDecodeRequest(t *testing.T) {
 	for i, c := range decodeRequestCases {
-		buf := bytes.NewBuffer(c.raw)
-		got, err := DecodeRequest(buf)
+		got, err := NewDecoder(bytes.NewReader(c.raw)).DecodeRequest()
 		if err != c.err {
 			t.Errorf("%d: expected error %v, got %v", i, c.err, err)
 		}
@@ -121,8 +120,8 @@ func BenchmarkDecodeSimpleString(b *testing.B) {
 	var err error
 
 	for i := 0; i < b.N; i++ {
-		r := bytes.NewBuffer(decodeValidCases[3].enc)
-		val, err = Decode(r)
+		r := bytes.NewReader(decodeValidCases[3].enc)
+		val, err = NewDecoder(r).Decode()
 	}
 	if err != nil {
 		b.Fatal(err)
@@ -135,8 +134,8 @@ func BenchmarkDecodeError(b *testing.B) {
 	var err error
 
 	for i := 0; i < b.N; i++ {
-		r := bytes.NewBuffer(decodeValidCases[7].enc)
-		val, err = Decode(r)
+		r := bytes.NewReader(decodeValidCases[7].enc)
+		val, err = NewDecoder(r).Decode()
 	}
 	if err != nil {
 		b.Fatal(err)
@@ -149,8 +148,8 @@ func BenchmarkDecodeInteger(b *testing.B) {
 	var err error
 
 	for i := 0; i < b.N; i++ {
-		r := bytes.NewBuffer(decodeValidCases[10].enc)
-		val, err = Decode(r)
+		r := bytes.NewReader(decodeValidCases[10].enc)
+		val, err = NewDecoder(r).Decode()
 	}
 	if err != nil {
 		b.Fatal(err)
@@ -163,8 +162,8 @@ func BenchmarkDecodeBulkString(b *testing.B) {
 	var err error
 
 	for i := 0; i < b.N; i++ {
-		r := bytes.NewBuffer(decodeValidCases[13].enc)
-		val, err = Decode(r)
+		r := bytes.NewReader(decodeValidCases[13].enc)
+		val, err = NewDecoder(r).Decode()
 	}
 	if err != nil {
 		b.Fatal(err)
@@ -177,8 +176,8 @@ func BenchmarkDecodeArray(b *testing.B) {
 	var err error
 
 	for i := 0; i < b.N; i++ {
-		r := bytes.NewBuffer(decodeValidCases[19].enc)
-		val, err = Decode(r)
+		r := bytes.NewReader(decodeValidCases[19].enc)
+		val, err = NewDecoder(r).Decode()
 	}
 	if err != nil {
 		b.Fatal(err)
@@ -191,8 +190,8 @@ func BenchmarkDecodeRequest(b *testing.B) {
 	var err error
 
 	for i := 0; i < b.N; i++ {
-		r := bytes.NewBuffer(decodeRequestCases[5].raw)
-		val, err = Decode(r)
+		r := bytes.NewReader(decodeRequestCases[5].raw)
+		val, err = NewDecoder(r).Decode()
 	}
 	if err != nil {
 		b.Fatal(err)
