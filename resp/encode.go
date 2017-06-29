@@ -42,10 +42,13 @@ type SimpleString string
 // as a BulkString, but this is the default encoding for a normal Go string.
 type BulkString string
 
-// Encode encode the value v and writes the serialized data to w.
+// Encode encodes the value v and writes the serialized data to w.
 func Encode(w io.Writer, v interface{}) error {
 	return encodeValue(w, v)
 }
+
+// TODO: use reusable scratch space and strconv.AppendXxx, write to a buffered writer
+// and flush on exit?
 
 // encodeValue encodes the value v and writes the serialized data to w.
 func encodeValue(w io.Writer, v interface{}) error {

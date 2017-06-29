@@ -59,13 +59,11 @@ func (a Array) String() string {
 // representing the request. If the encoded value is not an array, it
 // returns ErrNotAnArray, and if it is not a valid request, it returns ErrInvalidRequest.
 func DecodeRequest(r BytesReader) ([]string, error) {
-	// Decode the value
-	val, err := Decode(r)
+	// Decode the value, must be an array
+	val, err := decodeValue(r, true)
 	if err != nil {
 		return nil, err
 	}
-
-	// Must be an array
 	ar, ok := val.(Array)
 	if !ok {
 		return nil, ErrNotAnArray
@@ -90,15 +88,18 @@ func DecodeRequest(r BytesReader) ([]string, error) {
 
 // Decode decodes the provided byte slice and returns the parsed value.
 func Decode(r BytesReader) (interface{}, error) {
-	return decodeValue(r)
+	return decodeValue(r, false)
 }
 
 // decodeValue parses the byte slice and decodes the value based on its
 // prefix, as defined by the RESP protocol.
-func decodeValue(r BytesReader) (interface{}, error) {
+func decodeValue(r BytesReader, requiresArray bool) (interface{}, error) {
 	ch, err := r.ReadByte()
 	if err != nil {
 		return nil, err
+	}
+	if requiresArray && ch != '*' {
+		return nil, ErrNotAnArray
 	}
 
 	var val interface{}
@@ -146,13 +147,15 @@ func decodeArray(r BytesReader) (Array, error) {
 		// Invalid length
 		return nil, ErrInvalidArray
 
+		// TODO: cnt > 512MB
+
 	default:
 		// Allocate the array
 		ar := make(Array, cnt)
 
 		// Decode each value
 		for i := 0; i < int(cnt); i++ {
-			val, err := decodeValue(r)
+			val, err := decodeValue(r, false)
 			if err != nil {
 				return nil, err
 			}
@@ -178,10 +181,13 @@ func decodeBulkString(r BytesReader) (interface{}, error) {
 	case cnt < -1:
 		return nil, ErrInvalidBulkString
 
+		// TODO: cnt > 512MB
+
 	default:
 		// Then the string is cnt long, and bytes read is cnt+n+2 (for ending CRLF)
 		need := cnt + 2
 		got := 0
+		// TODO: reuse scratch space instead
 		buf := make([]byte, need)
 		for {
 			nb, err := r.Read(buf[got:])
@@ -206,6 +212,8 @@ func decodeInteger(r BytesReader) (val int64, err error) {
 
 loop:
 	for {
+		// TODO: limit to n characters (int64 + sign)
+
 		ch, err := r.ReadByte()
 		if err != nil {
 			return 0, err
