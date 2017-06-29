@@ -1,6 +1,7 @@
 package resp
 
 import (
+	"bufio"
 	"errors"
 	"io"
 	"strconv"
@@ -42,57 +43,80 @@ type SimpleString string
 // as a BulkString, but this is the default encoding for a normal Go string.
 type BulkString string
 
-// Encode encodes the value v and writes the serialized data to w.
-func Encode(w io.Writer, v interface{}) error {
-	return encodeValue(w, v)
+// Encoder encodes values to the Redis serialization protocol.
+type Encoder struct {
+	w         *bufio.Writer
+	maxLength int
+}
+
+// NewEncoder returns a new Encoder that writes to w.
+func NewEncoder(w io.Writer) *Encoder {
+	return &Encoder{
+		w:         bufferedWriter(w),
+		maxLength: defaultMaxLength,
+	}
+}
+
+func bufferedWriter(w io.Writer) *bufio.Writer {
+	if bw, ok := w.(*bufio.Writer); ok {
+		return bw
+	}
+	return bufio.NewWriter(w)
+}
+
+// Encode encodes the value v.
+func (e *Encoder) Encode(v interface{}) error {
+	if err := e.encodeValue(v); err != nil {
+		return err
+	}
+	return e.w.Flush()
 }
 
 // TODO: use reusable scratch space and strconv.AppendXxx, write to a buffered writer
 // and flush on exit?
 
-// encodeValue encodes the value v and writes the serialized data to w.
-func encodeValue(w io.Writer, v interface{}) error {
+func (e *Encoder) encodeValue(v interface{}) error {
 	switch v := v.(type) {
 	case OK:
-		_, err := w.Write(ok)
+		_, err := e.w.Write(ok)
 		return err
 	case Pong:
-		_, err := w.Write(pong)
+		_, err := e.w.Write(pong)
 		return err
 	case bool:
 		if v {
-			_, err := w.Write(t)
+			_, err := e.w.Write(t)
 			return err
 		}
-		_, err := w.Write(f)
+		_, err := e.w.Write(f)
 		return err
 	case SimpleString:
-		return encodeSimpleString(w, v)
+		return e.encodeSimpleString(v)
 	case Error:
-		return encodeError(w, v)
+		return e.encodeError(v)
 	case int64:
 		switch v {
 		case 0:
-			_, err := w.Write(zero)
+			_, err := e.w.Write(zero)
 			return err
 		case 1:
-			_, err := w.Write(one)
+			_, err := e.w.Write(one)
 			return err
 		default:
-			return encodeInteger(w, v)
+			return e.encodeInteger(v)
 		}
 	case string:
-		return encodeBulkString(w, BulkString(v))
+		return e.encodeBulkString(BulkString(v))
 	case BulkString:
-		return encodeBulkString(w, v)
+		return e.encodeBulkString(v)
 	case []string:
-		return encodeStringArray(w, v)
+		return e.encodeStringArray(v)
 	case []interface{}:
-		return encodeArray(w, Array(v))
+		return e.encodeArray(Array(v))
 	case Array:
-		return encodeArray(w, v)
+		return e.encodeArray(v)
 	case nil:
-		return encodeNil(w)
+		return e.encodeNil()
 	default:
 		return ErrInvalidValue
 	}
@@ -100,24 +124,21 @@ func encodeValue(w io.Writer, v interface{}) error {
 
 // encodeStringArray is a specialized array encoding func to avoid having to
 // allocate an empty slice interface and copy values to it to use encodeArray.
-func encodeStringArray(w io.Writer, v []string) error {
+func (e *Encoder) encodeStringArray(v []string) error {
 	// Special case for a nil array
 	if v == nil {
-		err := encodePrefixed(w, '*', "-1")
-		return err
+		return e.encodePrefixed('*', "-1")
 	}
 
 	// First encode the number of elements
 	n := len(v)
-	err := encodePrefixed(w, '*', strconv.Itoa(n))
-	if err != nil {
+	if err := e.encodePrefixed('*', strconv.Itoa(n)); err != nil {
 		return err
 	}
 
 	// Then encode each value
 	for _, el := range v {
-		err = encodeBulkString(w, BulkString(el))
-		if err != nil {
+		if err := e.encodeBulkString(BulkString(el)); err != nil {
 			return err
 		}
 	}
@@ -125,24 +146,21 @@ func encodeStringArray(w io.Writer, v []string) error {
 }
 
 // encodeArray encodes an array value to w.
-func encodeArray(w io.Writer, v Array) error {
+func (e *Encoder) encodeArray(v Array) error {
 	// Special case for a nil array
 	if v == nil {
-		err := encodePrefixed(w, '*', "-1")
-		return err
+		return e.encodePrefixed('*', "-1")
 	}
 
 	// First encode the number of elements
 	n := len(v)
-	err := encodePrefixed(w, '*', strconv.Itoa(n))
-	if err != nil {
+	if err := e.encodePrefixed('*', strconv.Itoa(n)); err != nil {
 		return err
 	}
 
 	// Then encode each value
 	for _, el := range v {
-		err = encodeValue(w, el)
-		if err != nil {
+		if err := e.encodeValue(el); err != nil {
 			return err
 		}
 	}
@@ -150,38 +168,39 @@ func encodeArray(w io.Writer, v Array) error {
 }
 
 // encodeBulkString encodes a bulk string to w.
-func encodeBulkString(w io.Writer, v BulkString) error {
+func (e *Encoder) encodeBulkString(v BulkString) error {
 	n := len(v)
 	data := strconv.Itoa(n) + "\r\n" + string(v)
-	return encodePrefixed(w, '$', data)
+	return e.encodePrefixed('$', data)
 }
 
 // encodeInteger encodes an integer value to w.
-func encodeInteger(w io.Writer, v int64) error {
-	return encodePrefixed(w, ':', strconv.FormatInt(v, 10))
+func (e *Encoder) encodeInteger(v int64) error {
+	return e.encodePrefixed(':', strconv.FormatInt(v, 10))
 }
 
 // encodeSimpleString encodes a simple string value to w.
-func encodeSimpleString(w io.Writer, v SimpleString) error {
-	return encodePrefixed(w, '+', string(v))
+func (e *Encoder) encodeSimpleString(v SimpleString) error {
+	return e.encodePrefixed('+', string(v))
 }
 
 // encodeError encodes an error value to w.
-func encodeError(w io.Writer, v Error) error {
-	return encodePrefixed(w, '-', string(v))
+func (e *Encoder) encodeError(v Error) error {
+	return e.encodePrefixed('-', string(v))
 }
 
 // encodeNil encodes a nil value as a nil bulk string.
-func encodeNil(w io.Writer) error {
-	return encodePrefixed(w, '$', "-1")
+func (e *Encoder) encodeNil() error {
+	return e.encodePrefixed('$', "-1")
 }
 
 // encodePrefixed encodes the data v to w, with the specified prefix.
-func encodePrefixed(w io.Writer, prefix byte, v string) error {
+func (e *Encoder) encodePrefixed(prefix byte, v string) error {
+	// TODO: reuse scratch space
 	buf := make([]byte, len(v)+3)
 	buf[0] = prefix
 	copy(buf[1:], v)
 	copy(buf[len(buf)-2:], "\r\n")
-	_, err := w.Write(buf)
+	_, err := e.w.Write(buf)
 	return err
 }
