@@ -72,8 +72,7 @@ func (e *Encoder) Encode(v interface{}) error {
 	return e.w.Flush()
 }
 
-// TODO: use reusable scratch space and strconv.AppendXxx, write to a buffered writer
-// and flush on exit?
+// TODO: use reusable scratch space and strconv.AppendXxx
 
 func (e *Encoder) encodeValue(v interface{}) error {
 	switch v := v.(type) {
