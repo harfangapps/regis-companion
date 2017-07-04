@@ -4,3 +4,7 @@
 # Redis dump files
 dump.rdb
 
+# Ignore the bin folder, except .gitkeep to keep the (empty) folder in git
+bin/*
+!bin/.gitkeep
+
