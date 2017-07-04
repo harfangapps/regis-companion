@@ -2,13 +2,19 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
 	"bitbucket.org/harfangapps/regis-companion/resp"
 
 	"github.com/pkg/errors"
+)
+
+var (
+	errEmptyCmd = errors.New("command is empty")
 )
 
 // Server defines the regis-companion Server that listens for incoming connections
@@ -48,7 +54,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 func (s *Server) serve(ctx context.Context, l net.Listener) error {
 	server := retryServer{
 		listener: l,
-		dispatch: t.serveConn,
+		dispatch: s.serveConn,
 		errChan:  s.ErrChan,
 	}
 	return server.serve(ctx)
@@ -62,4 +68,41 @@ func (s *Server) serveConn(done <-chan struct{}, serverWg *sync.WaitGroup, conn 
 
 	dec := resp.NewDecoder(conn)
 	enc := resp.NewEncoder(conn)
+	for {
+		// read the request
+		req, err := dec.DecodeRequest()
+		if err != nil {
+			err = errors.Wrap(err, "decode request error")
+			handleError(err, s.ErrChan)
+			return
+		}
+
+		// handle the request
+		res, err := s.execute(req)
+		if err != nil {
+			err = errors.Wrap(err, "execute request error")
+			handleError(err, s.ErrChan)
+			return
+		}
+
+		// write the response
+		if err := enc.Encode(res); err != nil {
+			err = errors.Wrap(err, "encode response error")
+			handleError(err, s.ErrChan)
+			return
+		}
+	}
+}
+
+func (s *Server) execute(req []string) (interface{}, error) {
+	if len(req) == 0 {
+		return nil, errEmptyCmd
+	}
+
+	switch cmd := strings.ToLower(req[0]); cmd {
+	case "ping":
+		return resp.Pong{}, nil
+	default:
+		return nil, fmt.Errorf("unknown command: %v", cmd)
+	}
 }
