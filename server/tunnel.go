@@ -2,12 +2,9 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"io"
-	"log"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/pkg/errors"
 
@@ -49,9 +46,6 @@ type Tunnel struct {
 	// If the send would block, the error is dropped. It is the responsibility
 	// of the caller to close the channel once the Tunnel is stopped.
 	ErrChan chan<- error
-
-	// wg waits for `forward` goroutines to exit
-	wg sync.WaitGroup
 }
 
 // ListenAndServe sets up the Tunnel by connecting via
@@ -71,53 +65,26 @@ func (t *Tunnel) ListenAndServe(ctx context.Context) error {
 
 // this makes it possible to test with a mock Listener.
 func (t *Tunnel) serve(ctx context.Context, l net.Listener) error {
-	defer l.Close()
-
-	done := ctx.Done()
-	go func() {
-		<-done
-		l.Close()
-	}()
-
-	var delay time.Duration
-	for {
-		local, err := l.Accept()
-		if err != nil {
-			err = errors.Wrap(err, "tunnel Accept error")
-
-			// if the Tunnel was stopped, return immediately
-			select {
-			case <-done:
-				t.wg.Wait()
-				return err
-			default:
-				// go on
-			}
-
-			// if the error is temporary, retry after a delay
-			if t.handleTemporary(&delay, err) {
-				continue
-			}
-			return err
-		}
-		delay = 0
-		t.wg.Add(1)
-		go t.forward(done, local)
+	server := retryServer{
+		listener: l,
+		dispatch: t.forward,
+		errChan:  t.ErrChan,
 	}
+	return server.serve(ctx)
 }
 
-func (t *Tunnel) forward(done <-chan struct{}, local net.Conn) {
+func (t *Tunnel) forward(done <-chan struct{}, serverWg *sync.WaitGroup, local net.Conn) {
 	wg := &sync.WaitGroup{}
 	defer func() {
-		local.Close() // close the local socket
-		wg.Wait()     // wait for sub-goroutines to exit
-		t.wg.Done()   // signal the Tunnel that this forward goroutine is done
+		local.Close()   // close the local socket
+		wg.Wait()       // wait for sub-goroutines to exit
+		serverWg.Done() // signal the server that this forward goroutine is done
 	}()
 
 	// SSH connect to the server
 	server, err := sshDialFn(t.Server.Network(), t.Server.String(), t.Config)
 	if err != nil {
-		t.handleError(errors.Wrap(err, "ssh server dial error"))
+		handleError(errors.Wrap(err, "ssh server dial error"), t.ErrChan)
 		return
 	}
 	defer server.Close()
@@ -125,7 +92,7 @@ func (t *Tunnel) forward(done <-chan struct{}, local net.Conn) {
 	// connect to the remote address via the SSH server
 	remote, err := server.Dial(t.Remote.Network(), t.Remote.String())
 	if err != nil {
-		t.handleError(errors.Wrap(err, "ssh remote dial error"))
+		handleError(errors.Wrap(err, "ssh remote dial error"), t.ErrChan)
 		return
 	}
 	defer remote.Close()
@@ -150,45 +117,7 @@ func (t *Tunnel) copyBytes(wg *sync.WaitGroup, dst io.Writer, src io.Reader) {
 
 	if _, err := io.Copy(dst, src); err != nil {
 		err = errors.Wrap(err, "copy bytes error")
-		t.handleError(err)
+		handleError(err, t.ErrChan)
 		return
-	}
-}
-
-// handle temporary errors by delaying a retry. Returns false if the error is
-// not temporary.
-func (t *Tunnel) handleTemporary(delay *time.Duration, err error) bool {
-	root := errors.Cause(err)
-
-	if te, ok := root.(interface {
-		Temporary() bool
-	}); ok && te.Temporary() {
-		if *delay == 0 {
-			*delay = 5 * time.Millisecond
-		} else {
-			*delay *= 2
-		}
-
-		if max := 1 * time.Second; *delay > max {
-			*delay = max
-		}
-
-		t.handleError(errors.Wrap(err, fmt.Sprintf("temporary error, retrying in %v", *delay)))
-		time.Sleep(*delay)
-		return true
-	}
-
-	return false
-}
-
-// handle the error by sending it to the ErrChan or logging it.
-func (t *Tunnel) handleError(err error) {
-	select {
-	case t.ErrChan <- err:
-	default:
-		// log if ErrChan is nil, drop otherwise
-		if t.ErrChan == nil {
-			log.Print(err)
-		}
 	}
 }
