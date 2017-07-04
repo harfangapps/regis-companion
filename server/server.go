@@ -21,12 +21,8 @@ type Server struct {
 	WriteTimeout time.Duration
 	ErrChan      chan<- error
 
-	// mu protects the following private fields
-	mu       sync.Mutex
-	listener net.Listener
-	tunnels  []*Tunnel
-	done     chan struct{}
-	closeErr error
+	// keeps track of launched Tunnels
+	wg sync.WaitGroup
 }
 
 func (s *Server) ListenAndServe() error {
@@ -40,8 +36,5 @@ func (s *Server) ListenAndServe() error {
 func (s *Server) serve(l net.Listener) error {
 	defer l.Close()
 
-	s.mu.Lock()
-	s.done = make(chan struct{})
-	s.listener = l
-	s.mu.Unlock()
+	return nil
 }

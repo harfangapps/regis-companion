@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"strconv"
 	"time"
 
@@ -50,6 +52,16 @@ func main() {
 		log.Fatalf("ssh agent failed: %v", err)
 	}
 
+	// properly stop the Tunnel on SIGINT
+	ctx, cancel := context.WithCancel(context.Background())
+
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, os.Interrupt)
+	go func() {
+		<-ch
+		cancel()
+	}()
+
 	config := &ssh.ClientConfig{
 		User:            *sshUserFlag,
 		Timeout:         *sshDialTimeoutFlag,
@@ -63,7 +75,7 @@ func main() {
 		Remote: remote,
 		Config: config,
 	}
-	if err := tun.ListenAndServe(); err != nil {
+	if err := tun.ListenAndServe(ctx); err != nil {
 		log.Fatalf("ListenAndServe error: %v", err)
 	}
 }

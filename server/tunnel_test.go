@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"io"
 	"net"
 	"strings"
@@ -8,58 +9,55 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"bitbucket.org/harfangapps/regis-companion/internal/testutils"
-
+	"github.com/pkg/errors"
 	"golang.org/x/crypto/ssh"
 )
 
 // arbitrary valid address
 var tcpAddr = &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8000}
 
-// Closing an unstarted Tunnel returns nil, even when called multiple times.
-func TestCloseUnstarted(t *testing.T) {
-	tun := &Tunnel{}
-	if e1 := tun.Close(); e1 != nil {
-		t.Errorf("want nil, got %v", e1)
-	}
-	if e2 := tun.Close(); e2 != nil {
-		t.Errorf("want nil, got %v", e2)
+// Stopping an unstarted Tunnel returns an error almost immediately.
+func TestStopUnstarted(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	tun := &Tunnel{Local: tcpAddr}
+	if err := tun.ListenAndServe(ctx); err == nil {
+		t.Errorf("want error, got nil")
+	} else {
+		t.Logf("got error %v", err)
 	}
 }
 
-// Closing a started Tunnel returns the error returned from Listener.Close,
-// even when called multiple times.
-func TestCloseAlreadyClosed(t *testing.T) {
+// Stopping a started Tunnel returns the error returned from Listener.Accept.
+func TestStopUnblocksAccept(t *testing.T) {
 	tun := &Tunnel{Local: tcpAddr, Server: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}}
 
-	var closeErr = errors.New("err")
+	wantErr := errors.New("err")
+	closeChan := make(chan struct{})
 	listener := &testutils.MockListener{
 		AcceptFunc: func(i int) (net.Conn, error) {
-			return nil, io.EOF
+			<-closeChan
+			return nil, wantErr
 		},
-		CloseErr: closeErr,
+		CloseChan: closeChan,
 	}
 
-	if err := tun.serve(listener); errors.Cause(err) != io.EOF {
-		t.Errorf("want io.EOF, got %v", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if err := tun.serve(ctx, listener); errors.Cause(err) != wantErr {
+		t.Errorf("want %v, got %v", wantErr, err)
 	}
 
-	// close once
-	if err := tun.Close(); err != closeErr {
-		t.Errorf("want %v, got %v", closeErr, err)
-	}
-
-	// close again, should return the same error
-	if err := tun.Close(); err != closeErr {
-		t.Errorf("want %v, got %v", closeErr, err)
-	}
-
-	// listener's Close should've been called twice (on exit of Tunnel.serve
-	// and on the first call to Tunnel.Close)
+	// listener's Close should've been called twice (on context signal
+	// and on exit from Tunnel.serve)
 	if n := listener.CloseCalls(); n != 2 {
 		t.Errorf("want listener.Close() to be called twice, got %v", n)
+	}
+	// listener's Accept should've been called once
+	if n := listener.AcceptCalls(); n != 1 {
+		t.Errorf("want listener.Close() to be called once, got %v", n)
 	}
 }
 
@@ -67,7 +65,6 @@ func TestCloseAlreadyClosed(t *testing.T) {
 func TestAcceptRetryTemporary(t *testing.T) {
 	tun := &Tunnel{Local: tcpAddr, Server: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}}
 
-	var closeErr = errors.New("err")
 	listener := &testutils.MockListener{
 		AcceptFunc: func(i int) (net.Conn, error) {
 			if i < 10 {
@@ -75,11 +72,10 @@ func TestAcceptRetryTemporary(t *testing.T) {
 			}
 			return nil, io.EOF
 		},
-		CloseErr: closeErr,
 	}
 
 	start := time.Now()
-	if err := tun.serve(listener); errors.Cause(err) != io.EOF {
+	if err := tun.serve(context.Background(), listener); errors.Cause(err) != io.EOF {
 		t.Errorf("want io.EOF, got %v", err)
 	}
 
@@ -88,12 +84,6 @@ func TestAcceptRetryTemporary(t *testing.T) {
 	got := time.Since(start)
 	if got < want || got > (want+(100*time.Millisecond)) {
 		t.Errorf("want duration of %v, got %v", want, got)
-	}
-
-	// closing returns the error returned by the Listener, and this
-	// MockListener returns nil.
-	if err := tun.Close(); err != closeErr {
-		t.Errorf("want %v, got %v", closeErr, err)
 	}
 }
 
@@ -130,7 +120,7 @@ func TestAcceptRetryTemporaryReset(t *testing.T) {
 	}
 
 	start := time.Now()
-	if err := tun.serve(listener); errors.Cause(err) != io.EOF {
+	if err := tun.serve(context.Background(), listener); errors.Cause(err) != io.EOF {
 		t.Errorf("want io.EOF, got %v", err)
 	}
 
@@ -157,7 +147,7 @@ func TestNoRetryTemporaryFalse(t *testing.T) {
 	}
 
 	start := time.Now()
-	if err := tun.serve(listener); errors.Cause(err) != testutils.ErrTemporaryFalse {
+	if err := tun.serve(context.Background(), listener); errors.Cause(err) != testutils.ErrTemporaryFalse {
 		t.Errorf("want %v, got %v", testutils.ErrTemporaryFalse, err)
 	}
 
@@ -170,52 +160,8 @@ func TestNoRetryTemporaryFalse(t *testing.T) {
 	}
 }
 
-// Closing the Tunnel unblocks the Listener.Accept call.
-func TestCloseUnblockAccept(t *testing.T) {
-	tun := &Tunnel{Local: tcpAddr, Server: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}}
-
-	var closeErr = errors.New("err")
-	var closeChan = make(chan struct{})
-	listener := &testutils.MockListener{
-		AcceptFunc: func(i int) (net.Conn, error) {
-			<-closeChan // wait until closed
-			return nil, io.EOF
-		},
-		CloseErr:  closeErr,
-		CloseChan: closeChan,
-	}
-
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		if err := tun.serve(listener); errors.Cause(err) != io.EOF {
-			t.Errorf("want io.EOF, got %v", err)
-		}
-		wg.Done()
-	}()
-
-	// wait for serve to start
-	<-time.After(100 * time.Millisecond)
-	// close the Tunnel
-	if err := tun.Close(); err != closeErr {
-		t.Errorf("want %v, got %v", closeErr, err)
-	}
-	wg.Wait()
-
-	// listener's Close should've been called twice (on exit of Tunnel.serve
-	// and on the first call to Tunnel.Close)
-	if n := listener.CloseCalls(); n != 2 {
-		t.Errorf("want listener.Close() to be called twice, got %v", n)
-	}
-
-	// listener's Accept should've been called just once.
-	if n := listener.AcceptCalls(); n != 1 {
-		t.Errorf("want listener.Accept() to be called once, got %v", n)
-	}
-}
-
-// Closing the Tunnel unblocks the active local and remote connections.
-func TestCloseUnblockConnection(t *testing.T) {
+// Stopping the Tunnel unblocks the active local and remote connections.
+func TestStopUnblockConnection(t *testing.T) {
 	// the close channel for the connections, shared because only the
 	// local connection is closed, so to unblock the remote connection
 	// it must use the same channel.
@@ -251,7 +197,6 @@ func TestCloseUnblockConnection(t *testing.T) {
 	tun := &Tunnel{Local: tcpAddr, Server: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
 
 	listenerCloseChan := make(chan struct{})
-	closeErr := errors.New("close")
 	listener := &testutils.MockListener{
 		AcceptFunc: func(i int) (net.Conn, error) {
 			// return one connection, then block until close
@@ -262,16 +207,19 @@ func TestCloseUnblockConnection(t *testing.T) {
 			return nil, io.EOF
 		},
 		CloseChan: listenerCloseChan,
-		CloseErr:  closeErr,
 	}
 
-	// start the tunnel in a goroutine and close it after a while
+	// start the tunnel in a goroutine and stop it after a while
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
-		if err := tun.serve(listener); errors.Cause(err) != io.EOF {
+		if err := tun.serve(ctx, listener); errors.Cause(err) != io.EOF {
 			t.Errorf("want io.EOF, got %v", err)
 		}
+		close(errChan)
 		wg.Done()
 	}()
 	// start the goroutine to process errors
@@ -289,20 +237,14 @@ func TestCloseUnblockConnection(t *testing.T) {
 		wg.Done()
 	}()
 
-	// wait for serve to start
-	<-time.After(100 * time.Millisecond)
-	// close the Tunnel
-	if err := tun.Close(); err != closeErr {
-		t.Errorf("want %v, got %v", closeErr, err)
-	}
 	wg.Wait()
 
 	// assert the calls to the SSH client
 	if n := sshClient.CloseCalls(); n != 1 {
-		t.Errorf("want sshClient.Close to be callsed once, got %v", n)
+		t.Errorf("want sshClient.Close to be called once, got %v", n)
 	}
 	if n := sshClient.DialCalls(); n != 1 {
-		t.Errorf("want sshClient.Dial to be callsed once, got %v", n)
+		t.Errorf("want sshClient.Dial to be called once, got %v", n)
 	}
 }
 
@@ -333,12 +275,16 @@ func TestSSHDialError(t *testing.T) {
 	}
 
 	// start the tunnel in a goroutine and close it after a while
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
-		if err := tun.serve(listener); errors.Cause(err) != io.EOF {
+		if err := tun.serve(ctx, listener); errors.Cause(err) != io.EOF {
 			t.Errorf("want io.EOF, got %v", err)
 		}
+		close(errChan)
 		wg.Done()
 	}()
 	// start the goroutine to process errors
@@ -356,12 +302,6 @@ func TestSSHDialError(t *testing.T) {
 		wg.Done()
 	}()
 
-	// wait for serve to start
-	<-time.After(100 * time.Millisecond)
-	// close the Tunnel
-	if err := tun.Close(); err != nil {
-		t.Errorf("want nil, got %v", err)
-	}
 	wg.Wait()
 
 	if n := theConn.CloseCalls(); n != 1 {
@@ -402,12 +342,16 @@ func TestServerDialError(t *testing.T) {
 	}
 
 	// start the tunnel in a goroutine and close it after a while
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
-		if err := tun.serve(listener); errors.Cause(err) != io.EOF {
+		if err := tun.serve(ctx, listener); errors.Cause(err) != io.EOF {
 			t.Errorf("want io.EOF, got %v", err)
 		}
+		close(errChan)
 		wg.Done()
 	}()
 	// start the goroutine to process errors
@@ -425,12 +369,6 @@ func TestServerDialError(t *testing.T) {
 		wg.Done()
 	}()
 
-	// wait for serve to start
-	<-time.After(100 * time.Millisecond)
-	// close the Tunnel
-	if err := tun.Close(); err != nil {
-		t.Errorf("want nil, got %v", err)
-	}
 	wg.Wait()
 
 	if n := theConn.CloseCalls(); n != 1 {
@@ -450,9 +388,6 @@ func TestRecordForwarding(t *testing.T) {
 	// the buffer that records the exchange
 	var buf testutils.SyncBuffer
 
-	// the close channel for the connections, shared because only the
-	// local connection is closed, so to unblock the remote connection
-	// it must use the same channel.
 	message := "hello"
 	newRecordingConn := func() net.Conn {
 		return &testutils.MockConn{
@@ -482,7 +417,6 @@ func TestRecordForwarding(t *testing.T) {
 	tun := &Tunnel{Local: tcpAddr, Server: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
 
 	listenerCloseChan := make(chan struct{})
-	closeErr := errors.New("close")
 	listener := &testutils.MockListener{
 		AcceptFunc: func(i int) (net.Conn, error) {
 			// return one connection, then block until close
@@ -493,16 +427,19 @@ func TestRecordForwarding(t *testing.T) {
 			return nil, io.EOF
 		},
 		CloseChan: listenerCloseChan,
-		CloseErr:  closeErr,
 	}
 
 	// start the tunnel in a goroutine and close it after a while
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
-		if err := tun.serve(listener); errors.Cause(err) != io.EOF {
+		if err := tun.serve(ctx, listener); errors.Cause(err) != io.EOF {
 			t.Errorf("want io.EOF, got %v", err)
 		}
+		close(errChan)
 		wg.Done()
 	}()
 	// start the goroutine to process errors
@@ -513,12 +450,6 @@ func TestRecordForwarding(t *testing.T) {
 		wg.Done()
 	}()
 
-	// wait for serve to start
-	<-time.After(100 * time.Millisecond)
-	// close the Tunnel
-	if err := tun.Close(); err != closeErr {
-		t.Errorf("want %v, got %v", closeErr, err)
-	}
 	wg.Wait()
 
 	// check that the buffer contains "hellohello" (bytes copied in both directions)

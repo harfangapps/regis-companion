@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -43,17 +44,13 @@ type Tunnel struct {
 
 	// The client configuration to use to connect to Server.
 	Config *ssh.ClientConfig
+
 	// The channel to send errors to. If nil, the errors are logged.
-	// If the send would block, the error is dropped.
+	// If the send would block, the error is dropped. It is the responsibility
+	// of the caller to close the channel once the Tunnel is stopped.
 	ErrChan chan<- error
 
-	// mu protects the following private fields
-	mu       sync.Mutex
-	listener net.Listener
-	done     chan struct{}
-	closeErr error
-
-	// wg waits for copyBytes goroutines to exit
+	// wg waits for `forward` goroutines to exit
 	wg sync.WaitGroup
 }
 
@@ -64,54 +61,23 @@ type Tunnel struct {
 //
 // This call is blocking, it returns only when an error
 // is encountered. As such, it always returns a non-nil error.
-func (t *Tunnel) ListenAndServe() error {
+func (t *Tunnel) ListenAndServe(ctx context.Context) error {
 	l, err := net.Listen(t.Local.Network(), t.Local.String())
 	if err != nil {
 		return errors.Wrap(err, "listen error")
 	}
-	return t.serve(l)
+	return t.serve(ctx, l)
 }
 
-// Close immediately closes the Tunnel's listener and
-// any active connections. It returns the error returned
-// from closing the Listener.
-func (t *Tunnel) Close() error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	select {
-	case <-t.done:
-		// already closed
-		return t.closeErr
-	default:
-		if t.done == nil {
-			// was never started, nothing to do
-			return nil
-		}
-
-		// first close the channel
-		close(t.done)
-		// then close the listener, which will trigger the rest
-		t.closeErr = t.listener.Close()
-		// wait for goroutines to exit cleanly
-		t.wg.Wait()
-		// can now close the ErrChan safely
-		if t.ErrChan != nil {
-			close(t.ErrChan)
-		}
-
-		return t.closeErr
-	}
-}
-
-// this makes it possible to test with a Listener that fails to accept.
-func (t *Tunnel) serve(l net.Listener) error {
+// this makes it possible to test with a mock Listener.
+func (t *Tunnel) serve(ctx context.Context, l net.Listener) error {
 	defer l.Close()
 
-	t.mu.Lock()
-	t.done = make(chan struct{})
-	t.listener = l
-	t.mu.Unlock()
+	done := ctx.Done()
+	go func() {
+		<-done
+		l.Close()
+	}()
 
 	var delay time.Duration
 	for {
@@ -119,9 +85,10 @@ func (t *Tunnel) serve(l net.Listener) error {
 		if err != nil {
 			err = errors.Wrap(err, "tunnel Accept error")
 
-			// if the Tunnel was closed, return immediately
+			// if the Tunnel was stopped, return immediately
 			select {
-			case <-t.done:
+			case <-done:
+				t.wg.Wait()
 				return err
 			default:
 				// go on
@@ -134,26 +101,18 @@ func (t *Tunnel) serve(l net.Listener) error {
 			return err
 		}
 		delay = 0
-		go t.forward(local)
+		t.wg.Add(1)
+		go t.forward(done, local)
 	}
 }
 
-func (t *Tunnel) forward(local net.Conn) {
-	defer local.Close()
-
-	// acquire the lock, as wg.Add is racy with wg.Wait in Tunnel.Close.
-	t.mu.Lock()
-	select {
-	case <-t.done:
-		// was closed while waiting on the lock, exit
-		t.mu.Unlock()
-		return
-	default:
-		// is definitely not closed and not `wg.Wait`ing
-		t.wg.Add(1)
-		defer t.wg.Done()
-	}
-	t.mu.Unlock()
+func (t *Tunnel) forward(done <-chan struct{}, local net.Conn) {
+	wg := &sync.WaitGroup{}
+	defer func() {
+		local.Close() // close the local socket
+		wg.Wait()     // wait for sub-goroutines to exit
+		t.wg.Done()   // signal the Tunnel that this forward goroutine is done
+	}()
 
 	// SSH connect to the server
 	server, err := sshDialFn(t.Server.Network(), t.Server.String(), t.Config)
@@ -171,25 +130,23 @@ func (t *Tunnel) forward(local net.Conn) {
 	}
 	defer remote.Close()
 
-	// acquire the lock, as wg.Add is racy with wg.Wait in Tunnel.Close.
-	t.mu.Lock()
 	select {
-	case <-t.done:
-		// was closed while waiting on the lock, will exit
+	case <-done:
+		// was stopped while connecting, will exit
 	default:
-		// is definitely not closed and not `wg.Wait`ing
-		t.wg.Add(2)
-		go t.copyBytes(local, remote)
-		go t.copyBytes(remote, local)
+		// use the local wait group to keep track of sub-goroutines
+		wg.Add(2)
+		go t.copyBytes(wg, local, remote)
+		go t.copyBytes(wg, remote, local)
 	}
-	t.mu.Unlock()
 
-	// block waiting for the Close signal
-	<-t.done
+	// block waiting for the stop signal
+	<-done
 }
 
-func (t *Tunnel) copyBytes(dst io.Writer, src io.Reader) {
-	defer t.wg.Done()
+func (t *Tunnel) copyBytes(wg *sync.WaitGroup, dst io.Writer, src io.Reader) {
+	// use the local wait group, NOT t.wg
+	defer wg.Done()
 
 	if _, err := io.Copy(dst, src); err != nil {
 		err = errors.Wrap(err, "copy bytes error")
