@@ -2,13 +2,29 @@
 
 * Listen only on local/loopback interface by default (127.0.0.1)
   - Or on a Unix socket but not sure if launchd can auto-start on unix sockets
+
 * Check what permissions the unix sockets should have
   - Also, make sure a sandboxed app can connect to a unix socket (path)
+
 * Hash of remote/server addresses for unix socket, or that makes it predictable so unsafe?
+
 * Subcommand to register itself as launchd service, confirm executable location (or test if absolute path is necessary)
+  - See also `brew services`, do similar to redis brew recipe.
+
 * Have a good, simple update flow
+  - Ideally, a custom homebrew recipe, so `brew update && brew upgrade redis-companion` works.
+  - http://docs.brew.sh/brew-tap.html
+  - Support manual download of binary too.
+  - Regis could check for companion updates and display a message when a new version is available.
+
 * Use context.Context everywhere
+
 * Use timeouts to close idle connections after a while
+  - Autoclose Tunnels after idle timeout without an active connection
+
 * Clean-up any resource on exit
+
 * Test logging via launchd, seems to output in /var/log/system.log?
+
 * Expvars exported via a command for introspection
+
