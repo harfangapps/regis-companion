@@ -66,10 +66,23 @@ func (s *Server) serveConn(done <-chan struct{}, serverWg *sync.WaitGroup, conn 
 		serverWg.Done() // signal the server that this connection is done
 	}()
 
+	// wait for stop signal and close the connection
+	go func() {
+		<-done
+		conn.Close()
+	}()
+
 	dec := resp.NewDecoder(conn)
 	enc := resp.NewEncoder(conn)
 	for {
 		// read the request
+		if s.ReadTimeout > 0 {
+			if err := conn.SetReadDeadline(time.Now().Add(s.ReadTimeout)); err != nil {
+				err = errors.Wrap(err, "set read deadline")
+				handleError(err, s.ErrChan)
+				return
+			}
+		}
 		req, err := dec.DecodeRequest()
 		if err != nil {
 			err = errors.Wrap(err, "decode request error")
@@ -86,6 +99,13 @@ func (s *Server) serveConn(done <-chan struct{}, serverWg *sync.WaitGroup, conn 
 		}
 
 		// write the response
+		if s.WriteTimeout > 0 {
+			if err := conn.SetWriteDeadline(time.Now().Add(s.WriteTimeout)); err != nil {
+				err = errors.Wrap(err, "set write deadline")
+				handleError(err, s.ErrChan)
+				return
+			}
+		}
 		if err := enc.Encode(res); err != nil {
 			err = errors.Wrap(err, "encode response error")
 			handleError(err, s.ErrChan)
