@@ -23,9 +23,8 @@ type Server struct {
 	// The address the server listens on.
 	Addr net.Addr
 
-	// Duration before the server stops if there is no active tunnel
-	// and no connection attempt.
-	IdleTimeout time.Duration
+	// Duration before the tunnels stop if there is no active connection.
+	TunnelIdleTimeout time.Duration
 	// Read timeout before returning a network error on a read attempt.
 	ReadTimeout time.Duration
 	// Write timeout before returning a network error on a write attempt.
@@ -62,6 +61,7 @@ func (s *Server) serve(ctx context.Context, l net.Listener) error {
 
 func (s *Server) serveConn(ctx context.Context, serverWg *sync.WaitGroup, conn net.Conn) {
 	wg := &sync.WaitGroup{}
+	//ctx, cancel := context.WithCancel(ctx)
 	done := ctx.Done()
 
 	defer func() {
@@ -98,6 +98,7 @@ func (s *Server) readWriteLoop(wg *sync.WaitGroup, conn net.Conn) {
 			handleError(err, s.ErrChan)
 			return
 		}
+		fmt.Println(req)
 
 		// handle the request
 		res, err := s.execute(req)
@@ -129,9 +130,11 @@ func (s *Server) execute(req []string) (interface{}, error) {
 	}
 
 	switch cmd := strings.ToLower(req[0]); cmd {
+	case "command":
+		return []string{"command", "ping"}, nil
 	case "ping":
 		return resp.Pong{}, nil
 	default:
-		return nil, fmt.Errorf("unknown command: %v", cmd)
+		return resp.Error(fmt.Sprintf("ERR unknown command %v", cmd)), nil
 	}
 }
