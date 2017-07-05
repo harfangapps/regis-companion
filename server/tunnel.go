@@ -75,10 +75,12 @@ func (t *Tunnel) serve(ctx context.Context, l net.Listener) error {
 
 func (t *Tunnel) forward(ctx context.Context, serverWg *sync.WaitGroup, local net.Conn) {
 	wg := &sync.WaitGroup{}
+	ctx, cancel := context.WithCancel(ctx)
 	done := ctx.Done()
 
 	defer func() {
 		local.Close()   // close the local socket
+		cancel()        // required to release resources
 		wg.Wait()       // wait for sub-goroutines to exit
 		serverWg.Done() // signal the server that this forward goroutine is done
 	}()
@@ -103,19 +105,21 @@ func (t *Tunnel) forward(ctx context.Context, serverWg *sync.WaitGroup, local ne
 	case <-done:
 		// was stopped while connecting, will exit
 	default:
-		// use the local wait group to keep track of sub-goroutines
+		// keep track of sub-goroutines
 		wg.Add(2)
-		go t.copyBytes(wg, local, remote)
-		go t.copyBytes(wg, remote, local)
+		go t.copyBytes(cancel, wg, local, remote)
+		go t.copyBytes(cancel, wg, remote, local)
 	}
 
 	// block waiting for the stop signal
-	// TODO: if goros exit but not because of stop signal, this goro is kept alive
 	<-done
 }
 
-func (t *Tunnel) copyBytes(wg *sync.WaitGroup, dst io.Writer, src io.Reader) {
-	defer wg.Done()
+func (t *Tunnel) copyBytes(cancel func(), wg *sync.WaitGroup, dst io.Writer, src io.Reader) {
+	defer func() {
+		cancel()
+		wg.Done()
+	}()
 
 	if _, err := io.Copy(dst, src); err != nil {
 		err = errors.Wrap(err, "copy bytes error")

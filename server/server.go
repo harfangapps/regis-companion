@@ -25,8 +25,6 @@ type Server struct {
 
 	// Duration before the tunnels stop if there is no active connection.
 	TunnelIdleTimeout time.Duration
-	// Read timeout before returning a network error on a read attempt.
-	ReadTimeout time.Duration
 	// Write timeout before returning a network error on a write attempt.
 	WriteTimeout time.Duration
 
@@ -61,44 +59,39 @@ func (s *Server) serve(ctx context.Context, l net.Listener) error {
 
 func (s *Server) serveConn(ctx context.Context, serverWg *sync.WaitGroup, conn net.Conn) {
 	wg := &sync.WaitGroup{}
-	//ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ctx)
 	done := ctx.Done()
 
 	defer func() {
 		conn.Close()    // close the serviced connection
+		cancel()        // required to release resources
 		wg.Wait()       // wait for sub-goroutines to exit
 		serverWg.Done() // signal the server that this connection is done
 	}()
 
 	wg.Add(1)
-	go s.readWriteLoop(wg, conn)
+	go s.readWriteLoop(cancel, wg, conn)
 
 	// block waiting for the stop signal
-	// TODO: if goros exit but not because of stop signal, this goro is kept alive
 	<-done
 }
 
-func (s *Server) readWriteLoop(wg *sync.WaitGroup, conn net.Conn) {
-	defer wg.Done()
+func (s *Server) readWriteLoop(cancel func(), wg *sync.WaitGroup, conn net.Conn) {
+	defer func() {
+		cancel()
+		wg.Done()
+	}()
 
 	dec := resp.NewDecoder(conn)
 	enc := resp.NewEncoder(conn)
 	for {
 		// read the request
-		if s.ReadTimeout > 0 {
-			if err := conn.SetReadDeadline(time.Now().Add(s.ReadTimeout)); err != nil {
-				err = errors.Wrap(err, "set read deadline")
-				handleError(err, s.ErrChan)
-				return
-			}
-		}
 		req, err := dec.DecodeRequest()
 		if err != nil {
 			err = errors.Wrap(err, "decode request error")
 			handleError(err, s.ErrChan)
 			return
 		}
-		fmt.Println(req)
 
 		// handle the request
 		res, err := s.execute(req)
@@ -129,10 +122,13 @@ func (s *Server) execute(req []string) (interface{}, error) {
 		return nil, errEmptyCmd
 	}
 
+	// TODO: assert command arity
 	switch cmd := strings.ToLower(req[0]); cmd {
 	case "command":
+		// list the supported commands (redis-cli always executes this on connect)
 		return []string{"command", "ping"}, nil
 	case "ping":
+		// only support the ping-pong version
 		return resp.Pong{}, nil
 	default:
 		return resp.Error(fmt.Sprintf("ERR unknown command %v", cmd)), nil
