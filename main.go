@@ -29,7 +29,6 @@ var (
 	addrFlag              = flag.String("addr", "127.0.0.1", "Server `address` to bind to.")
 	portFlag              = flag.Int("port", 7070, "Port `number` to listen on.")
 	tunnelIdleTimeoutFlag = flag.Duration("tunnel-idle-timeout", 30*time.Minute, "Idle `timeout` for inactive SSH tunnels.")
-	readTimeoutFlag       = flag.Duration("read-timeout", 30*time.Second, "Read `timeout`.")
 	writeTimeoutFlag      = flag.Duration("write-timeout", 30*time.Second, "Write `timeout`.")
 )
 
@@ -58,7 +57,6 @@ func main() {
 	srv := &server.Server{
 		Addr:              &net.TCPAddr{IP: ip, Port: *portFlag},
 		TunnelIdleTimeout: *tunnelIdleTimeoutFlag,
-		ReadTimeout:       *readTimeoutFlag,
 		WriteTimeout:      *writeTimeoutFlag,
 	}
 	if err := srv.ListenAndServe(ctx); err != nil {

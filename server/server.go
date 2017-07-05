@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +17,20 @@ import (
 var (
 	errEmptyCmd = errors.New("command is empty")
 )
+
+var supportedCommands = map[string]int{
+	"command": 0,
+	"ping":    0,
+}
+
+var commandNames []string
+
+func init() {
+	for k := range supportedCommands {
+		commandNames = append(commandNames, k)
+	}
+	sort.Strings(commandNames)
+}
 
 // Server defines the regis-companion Server that listens for incoming connections
 // and manages SSH tunnels.
@@ -122,15 +137,23 @@ func (s *Server) execute(req []string) (interface{}, error) {
 		return nil, errEmptyCmd
 	}
 
-	// TODO: assert command arity
-	switch cmd := strings.ToLower(req[0]); cmd {
+	cmd := strings.ToLower(req[0])
+	nParms, ok := supportedCommands[cmd]
+	if !ok {
+		return resp.Error(fmt.Sprintf("ERR unknown command %v", cmd)), nil
+	}
+	if (len(req) - 1) != nParms {
+		return resp.Error(fmt.Sprintf("ERR wrong number of arguments for %v", cmd)), nil
+	}
+
+	switch cmd {
 	case "command":
 		// list the supported commands (redis-cli always executes this on connect)
-		return []string{"command", "ping"}, nil
+		return commandNames, nil
 	case "ping":
 		// only support the ping-pong version
 		return resp.Pong{}, nil
 	default:
-		return resp.Error(fmt.Sprintf("ERR unknown command %v", cmd)), nil
+		panic(fmt.Sprintf("not implemented: %v", cmd))
 	}
 }
