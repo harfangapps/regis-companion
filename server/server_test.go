@@ -107,9 +107,8 @@ func TestStopServerUnblockConnection(t *testing.T) {
 
 	wg.Wait()
 
-	// Connection should have been Closed twice (after receiving stop signal,
-	// and in defer of the serveConn func).
-	if n := conn.CloseCalls(); n != 2 {
-		t.Errorf("want Conn.Close to be called twice, got %v", n)
+	// Connection should have been Closed once
+	if n := conn.CloseCalls(); n != 1 {
+		t.Errorf("want Conn.Close to be called once, got %v", n)
 	}
 }

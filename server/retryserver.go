@@ -15,31 +15,53 @@ import (
 // for connections, retry on temporary errors after a delay, and dispatch
 // a goroutine to handle connections.
 type retryServer struct {
-	listener net.Listener
-	dispatch func(done <-chan struct{}, wg *sync.WaitGroup, conn net.Conn)
-	errChan  chan<- error
-	wg       sync.WaitGroup
+	Listener    net.Listener
+	Dispatch    func(ctx context.Context, wg *sync.WaitGroup, conn net.Conn)
+	ErrChan     chan<- error
+	IdleTimeout time.Duration
+
+	// Atomic integer incremented whenever there's activity on the server.
+	// The retryServer itself increments it when there's an accepted
+	// connection, and wraps the connection in a net.Conn that automatically
+	// increments that counter when there's a Read or Write activity.
+	activityCounter int64
+
+	wg sync.WaitGroup
+	// TODO: support an idletimeout, expose the atomic int for sub-goros
+	// to use and update. Start a goro that checks at idletimeout intervals
+	// if the int is still the same, and if so cancels the context.
 }
 
 func (s *retryServer) serve(ctx context.Context) error {
-	defer s.listener.Close()
+	ctx, cancel := context.WithCancel(ctx)
 
+	defer func() {
+		// stop accepting new connections
+		s.Listener.Close()
+		// cancel the context
+		cancel()
+		// wait for goroutines to exit
+		s.wg.Wait()
+	}()
+
+	// listen for the stop signal and close the server on receive
+	s.wg.Add(1)
 	done := ctx.Done()
 	go func() {
 		<-done
-		s.listener.Close()
+		s.Listener.Close()
+		s.wg.Done()
 	}()
 
 	var delay time.Duration
 	for {
-		conn, err := s.listener.Accept()
+		conn, err := s.Listener.Accept()
 		if err != nil {
 			err = errors.Wrap(err, "Accept error")
 
 			// if the server was stopped, return immediately
 			select {
 			case <-done:
-				s.wg.Wait()
 				return err
 			default:
 				// go on
@@ -53,7 +75,7 @@ func (s *retryServer) serve(ctx context.Context) error {
 		}
 		delay = 0
 		s.wg.Add(1)
-		go s.dispatch(done, &s.wg, conn)
+		go s.Dispatch(ctx, &s.wg, conn)
 	}
 }
 
@@ -75,7 +97,7 @@ func (s *retryServer) handleTemporary(delay *time.Duration, err error) bool {
 			*delay = max
 		}
 
-		handleError(errors.Wrap(err, fmt.Sprintf("temporary error, retrying in %v", *delay)), s.errChan)
+		handleError(errors.Wrap(err, fmt.Sprintf("temporary error, retrying in %v", *delay)), s.ErrChan)
 		time.Sleep(*delay)
 		return true
 	}

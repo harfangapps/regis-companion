@@ -32,7 +32,7 @@ func defaultSSHDial(network, address string, config *ssh.ClientConfig) (dialClos
 // The bytes are transferred using the SSH tunnel from the Local
 // address to the Remote address.
 type Tunnel struct {
-	// The local address the client connects too.
+	// The local address the client connects to.
 	Local net.Addr
 	// The server address to connect to via SSH.
 	Server net.Addr
@@ -66,15 +66,17 @@ func (t *Tunnel) ListenAndServe(ctx context.Context) error {
 // this makes it possible to test with a mock Listener.
 func (t *Tunnel) serve(ctx context.Context, l net.Listener) error {
 	server := retryServer{
-		listener: l,
-		dispatch: t.forward,
-		errChan:  t.ErrChan,
+		Listener: l,
+		Dispatch: t.forward,
+		ErrChan:  t.ErrChan,
 	}
 	return server.serve(ctx)
 }
 
-func (t *Tunnel) forward(done <-chan struct{}, serverWg *sync.WaitGroup, local net.Conn) {
+func (t *Tunnel) forward(ctx context.Context, serverWg *sync.WaitGroup, local net.Conn) {
 	wg := &sync.WaitGroup{}
+	done := ctx.Done()
+
 	defer func() {
 		local.Close()   // close the local socket
 		wg.Wait()       // wait for sub-goroutines to exit
@@ -108,11 +110,11 @@ func (t *Tunnel) forward(done <-chan struct{}, serverWg *sync.WaitGroup, local n
 	}
 
 	// block waiting for the stop signal
+	// TODO: if goros exit but not because of stop signal, this goro is kept alive
 	<-done
 }
 
 func (t *Tunnel) copyBytes(wg *sync.WaitGroup, dst io.Writer, src io.Reader) {
-	// use the local wait group, NOT t.wg
 	defer wg.Done()
 
 	if _, err := io.Copy(dst, src); err != nil {

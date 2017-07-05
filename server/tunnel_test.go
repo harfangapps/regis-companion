@@ -248,6 +248,104 @@ func TestStopUnblockConnection(t *testing.T) {
 	}
 }
 
+// Accept error (non temporary) stops all active connections and returns.
+func TestAcceptErrorUnblockConnection(t *testing.T) {
+	// the close channel for the connections, shared because only the
+	// local connection is closed, so to unblock the remote connection
+	// it must use the same channel.
+	closeChan := make(chan struct{})
+	readWriteErr := errors.New("read-write")
+	newBlockingConn := func() net.Conn {
+		return &testutils.MockConn{
+			ReadFunc: func(i int, b []byte) (int, error) {
+				<-closeChan // block until close
+				return 0, readWriteErr
+			},
+			WriteFunc: func(i int, b []byte) (int, error) {
+				<-closeChan // block until close
+				return 0, readWriteErr
+			},
+			CloseChan: closeChan,
+		}
+	}
+
+	// return a mocked SSH client when dialing via SSH
+	sshClient := &testutils.MockSSHClient{
+		DialFunc: func(i int, n, addr string) (net.Conn, error) {
+			return newBlockingConn(), nil
+		},
+	}
+	sshDialFn = func(n, addr string, config *ssh.ClientConfig) (dialCloser, error) {
+		return sshClient, nil
+	}
+	defer func() { sshDialFn = defaultSSHDial }()
+
+	// the tunnel to test
+	errChan := make(chan error, 1)
+	tun := &Tunnel{Local: tcpAddr, Server: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
+
+	listener := &testutils.MockListener{
+		AcceptFunc: func(i int) (net.Conn, error) {
+			// return one connection, then block a while
+			if i == 0 {
+				return newBlockingConn(), nil
+			}
+			<-time.After(10 * time.Millisecond)
+			return nil, io.EOF
+		},
+	}
+
+	// start the tunnel in a goroutine and stop it after a while, should return earlier than that
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	start := time.Now()
+	go func() {
+		if err := tun.serve(ctx, listener); errors.Cause(err) != io.EOF {
+			t.Errorf("want io.EOF, got %v", err)
+		}
+		close(errChan)
+		wg.Done()
+	}()
+	// start the goroutine to process errors
+	go func() {
+		var n int
+		for err := range errChan {
+			if errors.Cause(err) != readWriteErr {
+				t.Errorf("want %v, got %v", readWriteErr, err)
+			}
+			n += 1
+		}
+		if n != 2 {
+			t.Errorf("want 2 errors, got %v", n)
+		}
+		wg.Done()
+	}()
+
+	wg.Wait()
+
+	// assert the duration
+	want := 10 * time.Millisecond
+	got := time.Since(start)
+	if got < want || got > (want+(10*time.Millisecond)) {
+		t.Errorf("want duration of %v, got %v", want, got)
+	}
+
+	// assert the calls to the SSH client
+	if n := sshClient.CloseCalls(); n != 1 {
+		t.Errorf("want sshClient.Close to be called once, got %v", n)
+	}
+	if n := sshClient.DialCalls(); n != 1 {
+		t.Errorf("want sshClient.Dial to be called once, got %v", n)
+	}
+	// assert the calls to Accept
+	if n := listener.AcceptCalls(); n != 2 {
+		t.Errorf("want Listener.Accept to be called twice, got %v", n)
+	}
+}
+
 // An error returned by the SSH Dial call closes the accepted connection.
 func TestSSHDialError(t *testing.T) {
 	sshErr := errors.New("ssh")

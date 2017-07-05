@@ -53,24 +53,33 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 
 func (s *Server) serve(ctx context.Context, l net.Listener) error {
 	server := retryServer{
-		listener: l,
-		dispatch: s.serveConn,
-		errChan:  s.ErrChan,
+		Listener: l,
+		Dispatch: s.serveConn,
+		ErrChan:  s.ErrChan,
 	}
 	return server.serve(ctx)
 }
 
-func (s *Server) serveConn(done <-chan struct{}, serverWg *sync.WaitGroup, conn net.Conn) {
+func (s *Server) serveConn(ctx context.Context, serverWg *sync.WaitGroup, conn net.Conn) {
+	wg := &sync.WaitGroup{}
+	done := ctx.Done()
+
 	defer func() {
 		conn.Close()    // close the serviced connection
+		wg.Wait()       // wait for sub-goroutines to exit
 		serverWg.Done() // signal the server that this connection is done
 	}()
 
-	// wait for stop signal and close the connection
-	go func() {
-		<-done
-		conn.Close()
-	}()
+	wg.Add(1)
+	go s.readWriteLoop(wg, conn)
+
+	// block waiting for the stop signal
+	// TODO: if goros exit but not because of stop signal, this goro is kept alive
+	<-done
+}
+
+func (s *Server) readWriteLoop(wg *sync.WaitGroup, conn net.Conn) {
+	defer wg.Done()
 
 	dec := resp.NewDecoder(conn)
 	enc := resp.NewEncoder(conn)
