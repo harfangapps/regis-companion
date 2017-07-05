@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -25,15 +26,16 @@ type retryServer struct {
 	// connection, and wraps the connection in a net.Conn that automatically
 	// increments that counter when there's a Read or Write activity.
 	activityCounter int64
+	previousCounter int64
 
+	// WaitGroup for all accepted connections, so that when the server returns,
+	// all goroutines are properly terminated.
 	wg sync.WaitGroup
-	// TODO: support an idletimeout, expose the atomic int for sub-goros
-	// to use and update. Start a goro that checks at idletimeout intervals
-	// if the int is still the same, and if so cancels the context.
 }
 
 func (s *retryServer) serve(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
+	done := ctx.Done()
 
 	defer func() {
 		// stop accepting new connections
@@ -46,12 +48,34 @@ func (s *retryServer) serve(ctx context.Context) error {
 
 	// listen for the stop signal and close the server on receive
 	s.wg.Add(1)
-	done := ctx.Done()
 	go func() {
 		<-done
 		s.Listener.Close()
 		s.wg.Done()
 	}()
+
+	// terminate on idle if requested
+	if s.IdleTimeout > 0 {
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+
+			for {
+				select {
+				case <-time.After(s.IdleTimeout):
+					current := atomic.LoadInt64(&s.activityCounter)
+					previous := atomic.LoadInt64(&s.previousCounter)
+					if current == previous {
+						cancel()
+						return
+					}
+					atomic.CompareAndSwapInt64(&s.previousCounter, previous, current)
+				case <-done:
+					return
+				}
+			}
+		}()
+	}
 
 	var delay time.Duration
 	for {
@@ -73,8 +97,13 @@ func (s *retryServer) serve(ctx context.Context) error {
 			}
 			return err
 		}
-		delay = 0
-		s.wg.Add(1)
+
+		delay = 0                              // reset the retry delay
+		atomic.AddInt64(&s.activityCounter, 1) // indicate that there was activity
+		s.wg.Add(1)                            // keep track of that goroutine
+
+		// if there's an idle timeout, wrap the conn to track activity
+		conn = activityConn{conn, &s.activityCounter}
 		go s.Dispatch(ctx, &s.wg, conn)
 	}
 }
