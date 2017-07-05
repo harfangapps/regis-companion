@@ -33,6 +33,10 @@ type retryServer struct {
 	wg sync.WaitGroup
 }
 
+func (s *retryServer) touch() {
+	atomic.AddInt64(&s.activityCounter, 1)
+}
+
 func (s *retryServer) serve(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	done := ctx.Done()

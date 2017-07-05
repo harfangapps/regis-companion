@@ -46,6 +46,11 @@ type Tunnel struct {
 	// If the send would block, the error is dropped. It is the responsibility
 	// of the caller to close the channel once the Tunnel is stopped.
 	ErrChan chan<- error
+
+	// mu protects the following private fields
+	mu     sync.Mutex
+	server retryServer
+	closed bool
 }
 
 // ListenAndServe sets up the Tunnel by connecting via
@@ -63,14 +68,35 @@ func (t *Tunnel) ListenAndServe(ctx context.Context) error {
 	return t.serve(ctx, l)
 }
 
+// Closed indicates if the Tunnel started and then stopped serving.
+func (t *Tunnel) Closed() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.closed
+}
+
 // this makes it possible to test with a mock Listener.
 func (t *Tunnel) serve(ctx context.Context, l net.Listener) error {
-	server := retryServer{
+	defer func() {
+		t.mu.Lock()
+		t.closed = true
+		t.mu.Unlock()
+	}()
+
+	t.mu.Lock()
+	t.server = retryServer{
 		Listener: l,
 		Dispatch: t.forward,
 		ErrChan:  t.ErrChan,
 	}
-	return server.serve(ctx)
+	t.mu.Unlock()
+	return t.server.serve(ctx)
+}
+
+func (t *Tunnel) Touch() {
+	t.mu.Lock()
+	t.server.touch()
+	t.mu.Unlock()
 }
 
 func (t *Tunnel) forward(ctx context.Context, serverWg *sync.WaitGroup, local net.Conn) {
