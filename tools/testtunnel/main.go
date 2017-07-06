@@ -97,13 +97,15 @@ func parseAddr(s string, defaultPort int) (net.Addr, error) {
 		if ip := net.ParseIP(s); ip == nil {
 			// not ip, must be a unix path
 			return &net.UnixAddr{Name: s, Net: "unix"}, nil
-		} else {
-			return &net.TCPAddr{IP: ip, Port: defaultPort}, nil
 		}
+		return &net.TCPAddr{IP: ip, Port: defaultPort}, nil
+
 	} else if ip := net.ParseIP(host); ip == nil {
 		return nil, fmt.Errorf("invalid address: %v", s)
+
 	} else if nPort, err := strconv.Atoi(port); err != nil {
 		return nil, fmt.Errorf("invalid port: %v: %v", port, err)
+
 	} else {
 		if nPort == 0 {
 			nPort = defaultPort

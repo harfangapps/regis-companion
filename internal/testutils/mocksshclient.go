@@ -22,6 +22,7 @@ type MockSSHClient struct {
 	closeIndex int
 }
 
+// CloseCalls returns the number of times Close was called.
 func (c *MockSSHClient) CloseCalls() int {
 	c.mu.Lock()
 	i := c.closeIndex
@@ -29,6 +30,7 @@ func (c *MockSSHClient) CloseCalls() int {
 	return i
 }
 
+// DialCalls returns the number of times Dial was called.
 func (c *MockSSHClient) DialCalls() int {
 	c.mu.Lock()
 	i := c.dialIndex
@@ -36,6 +38,7 @@ func (c *MockSSHClient) DialCalls() int {
 	return i
 }
 
+// Dial attempts a connection to the specified address.
 func (c *MockSSHClient) Dial(n, addr string) (net.Conn, error) {
 	c.mu.Lock()
 	i := c.dialIndex
@@ -44,6 +47,7 @@ func (c *MockSSHClient) Dial(n, addr string) (net.Conn, error) {
 	return c.DialFunc(i, n, addr)
 }
 
+// Close closes the SSH client.
 func (c *MockSSHClient) Close() error {
 	c.mu.Lock()
 	if c.CloseChan != nil {

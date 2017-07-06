@@ -25,6 +25,7 @@ type MockListener struct {
 	closeIndex  int
 }
 
+// AcceptCalls returns the number of times Accept was called.
 func (l *MockListener) AcceptCalls() int {
 	l.mu.Lock()
 	i := l.acceptIndex
@@ -32,6 +33,7 @@ func (l *MockListener) AcceptCalls() int {
 	return i
 }
 
+// CloseCalls returns the number of times Close was called.
 func (l *MockListener) CloseCalls() int {
 	l.mu.Lock()
 	i := l.closeIndex
@@ -39,6 +41,7 @@ func (l *MockListener) CloseCalls() int {
 	return i
 }
 
+// Accept accepts a connection.
 func (l *MockListener) Accept() (net.Conn, error) {
 	l.mu.Lock()
 	i := l.acceptIndex
@@ -48,6 +51,7 @@ func (l *MockListener) Accept() (net.Conn, error) {
 	return l.AcceptFunc(i)
 }
 
+// Close closes the Listener.
 func (l *MockListener) Close() error {
 	l.mu.Lock()
 	if l.CloseChan != nil {
@@ -64,6 +68,7 @@ func (l *MockListener) Close() error {
 	return l.CloseErr
 }
 
+// Addr returns the address the Listener listens on.
 func (l *MockListener) Addr() net.Addr {
 	return l.Address
 }

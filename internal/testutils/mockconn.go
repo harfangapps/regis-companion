@@ -30,6 +30,7 @@ type MockConn struct {
 	closeIndex int
 }
 
+// CloseCalls returns the number of times Close was called.
 func (c *MockConn) CloseCalls() int {
 	c.mu.Lock()
 	i := c.closeIndex
@@ -37,6 +38,7 @@ func (c *MockConn) CloseCalls() int {
 	return i
 }
 
+// ReadCalls returns the number of times Read was called.
 func (c *MockConn) ReadCalls() int {
 	c.mu.Lock()
 	i := c.readIndex
@@ -44,6 +46,7 @@ func (c *MockConn) ReadCalls() int {
 	return i
 }
 
+// WriteCalls returns the number of times Write was called.
 func (c *MockConn) WriteCalls() int {
 	c.mu.Lock()
 	i := c.writeIndex
@@ -51,6 +54,7 @@ func (c *MockConn) WriteCalls() int {
 	return i
 }
 
+// Read implements io.Reader for MockConn.
 func (c *MockConn) Read(b []byte) (int, error) {
 	c.mu.Lock()
 	i := c.readIndex
@@ -59,6 +63,7 @@ func (c *MockConn) Read(b []byte) (int, error) {
 	return c.ReadFunc(i, b)
 }
 
+// Write implements io.Writer for MockConn.
 func (c *MockConn) Write(b []byte) (int, error) {
 	c.mu.Lock()
 	i := c.writeIndex
@@ -67,6 +72,7 @@ func (c *MockConn) Write(b []byte) (int, error) {
 	return c.WriteFunc(i, b)
 }
 
+// Close implements io.Closer for MockConn.
 func (c *MockConn) Close() error {
 	c.mu.Lock()
 	if c.CloseChan != nil {
@@ -82,22 +88,27 @@ func (c *MockConn) Close() error {
 	return c.CloseErr
 }
 
+// LocalAddr returns the local address of the connection.
 func (c *MockConn) LocalAddr() net.Addr {
 	return c.LocalAddress
 }
 
+// RemoteAddr returns the remote address of the connection.
 func (c *MockConn) RemoteAddr() net.Addr {
 	return c.RemoteAddress
 }
 
+// SetDeadline is a no-op for MockConn.
 func (c *MockConn) SetDeadline(t time.Time) error {
 	return nil
 }
 
+// SetReadDeadline is a no-op for MockConn.
 func (c *MockConn) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
+// SetWriteDeadline is a no-op for MockConn.
 func (c *MockConn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
