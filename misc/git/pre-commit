@@ -28,10 +28,10 @@ unused $(go list ./... | grep -v /vendor/)
 echo "<<< unused"
 echo
 
-echo ">>> gas"
-gas $(find . -name "*.go" | grep -v /vendor/ | grep -v '_test.go$')
-echo "<<< gas"
-echo
+# echo ">>> gas"
+# gas $(find . -name "*.go" | grep -v /vendor/ | grep -v '_test.go$')
+# echo "<<< gas"
+# echo
 
 # Check for gofmt problems and report if any.
 gofiles=$(git diff --cached --name-only --diff-filter=ACM | grep '.go$' | grep -v /vendor/)
