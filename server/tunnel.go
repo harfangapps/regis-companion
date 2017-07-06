@@ -65,7 +65,26 @@ func (t *Tunnel) ListenAndServe(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "listen error")
 	}
-	return t.serve(ctx, l)
+	return t.Serve(ctx, l)
+}
+
+// Listen creates a Listener listening on the Local address of the
+// Tunnel. It returns the listener, the port it uses (0 if not
+// listening on a TCP address), or an error.
+//
+// The main purpose is to listen on port 0 and let the system
+// select a free TCP port, and then get that port number back.
+// The returned Listener should then be passed to Tunnel.Serve
+// to start accepting connections.
+func (t *Tunnel) Listen() (l net.Listener, port int, err error) {
+	l, err = net.Listen(t.Local.Network(), t.Local.String())
+	if err != nil {
+		return nil, 0, err
+	}
+	if addr, ok := l.Addr().(*net.TCPAddr); ok {
+		port = addr.Port
+	}
+	return l, port, nil
 }
 
 // Closed indicates if the Tunnel started and then stopped serving.
@@ -75,8 +94,12 @@ func (t *Tunnel) Closed() bool {
 	return t.closed
 }
 
-// this makes it possible to test with a mock Listener.
-func (t *Tunnel) serve(ctx context.Context, l net.Listener) error {
+// Serve starts accepting connections using the provided Listener.
+// It can be stopped by cancelling the provided context.
+//
+// This call is blocking, it returns only when an error
+// is encountered. As such, it always returns a non-nil error.
+func (t *Tunnel) Serve(ctx context.Context, l net.Listener) error {
 	defer func() {
 		t.mu.Lock()
 		t.closed = true

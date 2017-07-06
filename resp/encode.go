@@ -108,6 +108,8 @@ func (e *Encoder) encodeValue(v interface{}) error {
 		return e.encodeBulkString(BulkString(v))
 	case BulkString:
 		return e.encodeBulkString(v)
+	case []byte:
+		return e.encodeBulkString(BulkString(v))
 	case []string:
 		return e.encodeStringArray(v)
 	case []interface{}:

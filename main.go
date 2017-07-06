@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"time"
 
 	"bitbucket.org/harfangapps/regis-companion/server"
@@ -25,7 +26,7 @@ func main() {
 	flag.Parse()
 
 	if *versionFlag {
-		fmt.Printf("%s (git:%s go:%s)\n", server.Version, server.GitHash, server.GoVersion)
+		fmt.Printf("%s (git:%s go:%s)\n", server.Version, server.GitHash, runtime.Version())
 		return
 	}
 

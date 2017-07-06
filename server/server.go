@@ -21,9 +21,6 @@ var (
 
 	// git describe --tags
 	Version string
-
-	// go version
-	GoVersion string
 )
 
 var (
@@ -32,8 +29,8 @@ var (
 
 // each supported command implements this interface
 type command interface {
-	Validate(cmdName string, req []string) error
-	Execute(cmdName string, req []string) (interface{}, error)
+	Validate(cmdName string, req []string, s *Server) error
+	Execute(cmdName string, req []string, s *Server) (interface{}, error)
 }
 
 // assigned in init
@@ -45,6 +42,7 @@ var (
 func init() {
 	supportedCommands = map[string]command{
 		"command": commandCmd{},
+		"info":    infoCmd{},
 		"ping":    pingCmd{},
 	}
 
@@ -52,6 +50,11 @@ func init() {
 		commandNames = append(commandNames, k)
 	}
 	sort.Strings(commandNames)
+}
+
+type tunnelAddrs struct {
+	Server net.Addr
+	Remote net.Addr
 }
 
 // Server defines the regis-companion Server that listens for incoming connections
@@ -71,6 +74,10 @@ type Server struct {
 	// If set, this ErrChain is used for all Tunnels started by this
 	// Server.
 	ErrChan chan<- error
+
+	// mu protects the map of addresses-to-tunnel
+	mu      sync.Mutex
+	tunnels map[tunnelAddrs]*Tunnel
 }
 
 // ListenAndServe starts the server on the specified Addr.
@@ -86,6 +93,10 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 }
 
 func (s *Server) serve(ctx context.Context, l net.Listener) error {
+	s.mu.Lock()
+	s.tunnels = make(map[tunnelAddrs]*Tunnel)
+	s.mu.Unlock()
+
 	server := retryServer{
 		Listener: l,
 		Dispatch: s.serveConn,
@@ -162,10 +173,10 @@ func (s *Server) execute(req []string) (interface{}, error) {
 	cmdName := strings.ToLower(req[0])
 	cmd, ok := supportedCommands[cmdName]
 	if !ok {
-		return resp.Error(fmt.Sprintf("ERR unknown command %v", cmd)), nil
+		return resp.Error(fmt.Sprintf("ERR unknown command %v", cmdName)), nil
 	}
-	if err := cmd.Validate(cmdName, req); err != nil {
+	if err := cmd.Validate(cmdName, req, s); err != nil {
 		return resp.Error(err.Error()), nil
 	}
-	return cmd.Execute(cmdName, req)
+	return cmd.Execute(cmdName, req, s)
 }

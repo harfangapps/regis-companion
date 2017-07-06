@@ -55,12 +55,12 @@ func TestStopUnblocksAccept(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
-	if err := tun.serve(ctx, listener); errors.Cause(err) != wantErr {
+	if err := tun.Serve(ctx, listener); errors.Cause(err) != wantErr {
 		t.Errorf("want %v, got %v", wantErr, err)
 	}
 
 	// listener's Close should've been called twice (on context signal
-	// and on exit from Tunnel.serve)
+	// and on exit from Tunnel.Serve)
 	if n := listener.CloseCalls(); n != 2 {
 		t.Errorf("want listener.Close() to be called twice, got %v", n)
 	}
@@ -84,7 +84,7 @@ func TestAcceptRetryTemporary(t *testing.T) {
 	}
 
 	start := time.Now()
-	if err := tun.serve(context.Background(), listener); errors.Cause(err) != io.EOF {
+	if err := tun.Serve(context.Background(), listener); errors.Cause(err) != io.EOF {
 		t.Errorf("want io.EOF, got %v", err)
 	}
 
@@ -129,7 +129,7 @@ func TestAcceptRetryTemporaryReset(t *testing.T) {
 	}
 
 	start := time.Now()
-	if err := tun.serve(context.Background(), listener); errors.Cause(err) != io.EOF {
+	if err := tun.Serve(context.Background(), listener); errors.Cause(err) != io.EOF {
 		t.Errorf("want io.EOF, got %v", err)
 	}
 
@@ -156,7 +156,7 @@ func TestNoRetryTemporaryFalse(t *testing.T) {
 	}
 
 	start := time.Now()
-	if err := tun.serve(context.Background(), listener); errors.Cause(err) != testutils.ErrTemporaryFalse {
+	if err := tun.Serve(context.Background(), listener); errors.Cause(err) != testutils.ErrTemporaryFalse {
 		t.Errorf("want %v, got %v", testutils.ErrTemporaryFalse, err)
 	}
 
@@ -225,7 +225,7 @@ func TestStopUnblockConnection(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
-		if err := tun.serve(ctx, listener); errors.Cause(err) != io.EOF {
+		if err := tun.Serve(ctx, listener); errors.Cause(err) != io.EOF {
 			t.Errorf("want io.EOF, got %v", err)
 		}
 		close(errChan)
@@ -312,7 +312,7 @@ func TestAcceptErrorUnblockConnection(t *testing.T) {
 	wg.Add(2)
 	start := time.Now()
 	go func() {
-		if err := tun.serve(ctx, listener); errors.Cause(err) != io.EOF {
+		if err := tun.Serve(ctx, listener); errors.Cause(err) != io.EOF {
 			t.Errorf("want io.EOF, got %v", err)
 		}
 		close(errChan)
@@ -388,7 +388,7 @@ func TestSSHDialError(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
-		if err := tun.serve(ctx, listener); errors.Cause(err) != io.EOF {
+		if err := tun.Serve(ctx, listener); errors.Cause(err) != io.EOF {
 			t.Errorf("want io.EOF, got %v", err)
 		}
 		close(errChan)
@@ -455,7 +455,7 @@ func TestServerDialError(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
-		if err := tun.serve(ctx, listener); errors.Cause(err) != io.EOF {
+		if err := tun.Serve(ctx, listener); errors.Cause(err) != io.EOF {
 			t.Errorf("want io.EOF, got %v", err)
 		}
 		close(errChan)
@@ -543,7 +543,7 @@ func TestRecordForwarding(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
-		if err := tun.serve(ctx, listener); errors.Cause(err) != io.EOF {
+		if err := tun.Serve(ctx, listener); errors.Cause(err) != io.EOF {
 			t.Errorf("want io.EOF, got %v", err)
 		}
 		close(errChan)
