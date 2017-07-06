@@ -97,7 +97,7 @@ func TestStopServerUnblockConnection(t *testing.T) {
 			if errors.Cause(err) != readWriteErr {
 				t.Errorf("want %v, got %v", readWriteErr, err)
 			}
-			n += 1
+			n++
 		}
 		if n != 1 {
 			t.Errorf("want 1 error, got %v", n)

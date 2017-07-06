@@ -39,7 +39,7 @@ func (c *MockSSHClient) DialCalls() int {
 func (c *MockSSHClient) Dial(n, addr string) (net.Conn, error) {
 	c.mu.Lock()
 	i := c.dialIndex
-	c.dialIndex += 1
+	c.dialIndex++
 	c.mu.Unlock()
 	return c.DialFunc(i, n, addr)
 }
@@ -54,7 +54,7 @@ func (c *MockSSHClient) Close() error {
 			close(c.CloseChan)
 		}
 	}
-	c.closeIndex += 1
+	c.closeIndex++
 	c.mu.Unlock()
 	return c.CloseErr
 }

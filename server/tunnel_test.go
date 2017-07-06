@@ -238,7 +238,7 @@ func TestStopUnblockConnection(t *testing.T) {
 			if errors.Cause(err) != readWriteErr {
 				t.Errorf("want %v, got %v", readWriteErr, err)
 			}
-			n += 1
+			n++
 		}
 		if n != 2 {
 			t.Errorf("want 2 errors, got %v", n)
@@ -325,7 +325,7 @@ func TestAcceptErrorUnblockConnection(t *testing.T) {
 			if errors.Cause(err) != readWriteErr {
 				t.Errorf("want %v, got %v", readWriteErr, err)
 			}
-			n += 1
+			n++
 		}
 		if n != 2 {
 			t.Errorf("want 2 errors, got %v", n)
@@ -401,7 +401,7 @@ func TestSSHDialError(t *testing.T) {
 			if errors.Cause(err) != sshErr {
 				t.Errorf("want %v, got %v", sshErr, err)
 			}
-			n += 1
+			n++
 		}
 		if n != 1 {
 			t.Errorf("want 1 error, got %v", n)
@@ -468,7 +468,7 @@ func TestServerDialError(t *testing.T) {
 			if errors.Cause(err) != sshErr {
 				t.Errorf("want %v, got %v", sshErr, err)
 			}
-			n += 1
+			n++
 		}
 		if n != 1 {
 			t.Errorf("want 1 error, got %v", n)

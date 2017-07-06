@@ -42,7 +42,7 @@ func (l *MockListener) CloseCalls() int {
 func (l *MockListener) Accept() (net.Conn, error) {
 	l.mu.Lock()
 	i := l.acceptIndex
-	l.acceptIndex += 1
+	l.acceptIndex++
 	l.mu.Unlock()
 
 	return l.AcceptFunc(i)
@@ -58,7 +58,7 @@ func (l *MockListener) Close() error {
 			close(l.CloseChan)
 		}
 	}
-	l.closeIndex += 1
+	l.closeIndex++
 	l.mu.Unlock()
 
 	return l.CloseErr

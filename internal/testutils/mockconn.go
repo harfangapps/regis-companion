@@ -54,7 +54,7 @@ func (c *MockConn) WriteCalls() int {
 func (c *MockConn) Read(b []byte) (int, error) {
 	c.mu.Lock()
 	i := c.readIndex
-	c.readIndex += 1
+	c.readIndex++
 	c.mu.Unlock()
 	return c.ReadFunc(i, b)
 }
@@ -62,7 +62,7 @@ func (c *MockConn) Read(b []byte) (int, error) {
 func (c *MockConn) Write(b []byte) (int, error) {
 	c.mu.Lock()
 	i := c.writeIndex
-	c.writeIndex += 1
+	c.writeIndex++
 	c.mu.Unlock()
 	return c.WriteFunc(i, b)
 }
@@ -77,7 +77,7 @@ func (c *MockConn) Close() error {
 			close(c.CloseChan)
 		}
 	}
-	c.closeIndex += 1
+	c.closeIndex++
 	c.mu.Unlock()
 	return c.CloseErr
 }
