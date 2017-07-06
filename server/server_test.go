@@ -112,3 +112,7 @@ func TestStopServerUnblockConnection(t *testing.T) {
 		t.Errorf("want Conn.Close to be called once, got %v", n)
 	}
 }
+
+func TestExecuteRequests(t *testing.T) {
+	t.Skip()
+}

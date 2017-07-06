@@ -28,6 +28,15 @@ func TestStopUnstarted(t *testing.T) {
 	} else {
 		t.Logf("got error %v", err)
 	}
+
+	// stopping closes the tunnel
+	if ok := tun.Closed(); !ok {
+		t.Errorf("want true, got %v", ok)
+	}
+	// and Touch returns false on a closed tunnel
+	if ok := tun.Touch(); ok {
+		t.Errorf("want false, got %v", ok)
+	}
 }
 
 // Stopping a started Tunnel returns the error returned from Listener.Accept.
