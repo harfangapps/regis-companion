@@ -1,17 +1,18 @@
 package server
 
-import "fmt"
+import (
+	"fmt"
+
+	"bitbucket.org/harfangapps/regis-companion/resp"
+)
 
 type commandCmd struct{}
 
-func (c commandCmd) Validate(cmdName string, req []string, s *Server) error {
+// COMMAND
+func (c commandCmd) Execute(cmdName string, req []string, s *Server) (interface{}, error) {
 	// support only argument-less COMMAND
 	if len(req) != 1 {
-		return fmt.Errorf("ERR wrong number of arguments for %v", cmdName)
+		return resp.Error(fmt.Sprintf("ERR wrong number of arguments for %v", cmdName)), nil
 	}
-	return nil
-}
-
-func (c commandCmd) Execute(cmdName string, req []string, s *Server) (interface{}, error) {
 	return commandNames, nil
 }

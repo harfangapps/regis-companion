@@ -7,18 +7,18 @@ import (
 	"os"
 	"runtime"
 	"strings"
+
+	"bitbucket.org/harfangapps/regis-companion/resp"
 )
 
 type infoCmd struct{}
 
-func (c infoCmd) Validate(cmdName string, req []string, s *Server) error {
-	if l := len(req); l < 1 || l > 2 {
-		return fmt.Errorf("ERR wrong number of arguments for %v", cmdName)
-	}
-	return nil
-}
-
+// INFO [section]
 func (c infoCmd) Execute(cmdName string, req []string, s *Server) (interface{}, error) {
+	if l := len(req); l < 1 || l > 2 {
+		return resp.Error(fmt.Sprintf("ERR wrong number of arguments for %v", cmdName)), nil
+	}
+
 	var section string
 	if len(req) == 2 {
 		section = strings.ToLower(req[1])
@@ -94,6 +94,8 @@ func (c infoCmd) Execute(cmdName string, req []string, s *Server) (interface{}, 
 		fmt.Fprintf(&buf, "num_goroutines:%d\r\n", runtime.NumGoroutine())
 		fmt.Fprintf(&buf, "gomaxprocs:%d\r\n", runtime.GOMAXPROCS(0))
 	}
+
+	// TODO: stats and clients sections, using expvar
 
 	return buf.Bytes(), nil
 }

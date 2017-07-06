@@ -29,7 +29,6 @@ var (
 
 // each supported command implements this interface
 type command interface {
-	Validate(cmdName string, req []string, s *Server) error
 	Execute(cmdName string, req []string, s *Server) (interface{}, error)
 }
 
@@ -174,9 +173,6 @@ func (s *Server) execute(req []string) (interface{}, error) {
 	cmd, ok := supportedCommands[cmdName]
 	if !ok {
 		return resp.Error(fmt.Sprintf("ERR unknown command %v", cmdName)), nil
-	}
-	if err := cmd.Validate(cmdName, req, s); err != nil {
-		return resp.Error(err.Error()), nil
 	}
 	return cmd.Execute(cmdName, req, s)
 }
