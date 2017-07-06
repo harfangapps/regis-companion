@@ -18,14 +18,24 @@ var (
 	errEmptyCmd = errors.New("command is empty")
 )
 
-var supportedCommands = map[string]int{
-	"command": 0,
-	"ping":    0,
+// each supported command implements this interface
+type command interface {
+	Validate(cmdName string, req []string) error
+	Execute(cmdName string, req []string) (interface{}, error)
 }
 
-var commandNames []string
+// assigned in init
+var (
+	supportedCommands map[string]command
+	commandNames      []string
+)
 
 func init() {
+	supportedCommands = map[string]command{
+		"command": commandCmd{},
+		"ping":    pingCmd{},
+	}
+
 	for k := range supportedCommands {
 		commandNames = append(commandNames, k)
 	}
@@ -137,23 +147,13 @@ func (s *Server) execute(req []string) (interface{}, error) {
 		return nil, errEmptyCmd
 	}
 
-	cmd := strings.ToLower(req[0])
-	nParms, ok := supportedCommands[cmd]
+	cmdName := strings.ToLower(req[0])
+	cmd, ok := supportedCommands[cmdName]
 	if !ok {
 		return resp.Error(fmt.Sprintf("ERR unknown command %v", cmd)), nil
 	}
-	if (len(req) - 1) != nParms {
-		return resp.Error(fmt.Sprintf("ERR wrong number of arguments for %v", cmd)), nil
+	if err := cmd.Validate(cmdName, req); err != nil {
+		return resp.Error(err.Error()), nil
 	}
-
-	switch cmd {
-	case "command":
-		// list the supported commands (redis-cli always executes this on connect)
-		return commandNames, nil
-	case "ping":
-		// only support the ping-pong version
-		return resp.Pong{}, nil
-	default:
-		panic(fmt.Sprintf("not implemented: %v", cmd))
-	}
+	return cmd.Execute(cmdName, req)
 }

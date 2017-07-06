@@ -93,10 +93,17 @@ func (t *Tunnel) serve(ctx context.Context, l net.Listener) error {
 	return t.server.serve(ctx)
 }
 
-func (t *Tunnel) Touch() {
+// Touch updates the activity indicator to prevent the Tunnel from
+// closing due to the idle timeout. It returns true if it successfully
+// update the counter, false if the Tunnel was already closed.
+func (t *Tunnel) Touch() bool {
 	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return false
+	}
 	t.server.touch()
-	t.mu.Unlock()
+	return true
 }
 
 func (t *Tunnel) forward(ctx context.Context, serverWg *sync.WaitGroup, local net.Conn) {
