@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/crypto/ssh"
+
 	"bitbucket.org/harfangapps/regis-companion/resp"
 
 	"github.com/pkg/errors"
@@ -24,7 +26,8 @@ var (
 )
 
 var (
-	errEmptyCmd = errors.New("command is empty")
+	errEmptyCmd      = errors.New("command is empty")
+	defaultLocalAddr = &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0}
 )
 
 // each supported command implements this interface
@@ -40,9 +43,10 @@ var (
 
 func init() {
 	supportedCommands = map[string]command{
-		"command": commandCmd{},
-		"info":    infoCmd{},
-		"ping":    pingCmd{},
+		"command":       commandCmd{},
+		"gettunneladdr": getTunnelAddrCmd{},
+		"info":          infoCmd{},
+		"ping":          pingCmd{},
 	}
 
 	for k := range supportedCommands {
@@ -89,6 +93,41 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		return errors.Wrap(err, "listen error")
 	}
 	return s.serve(ctx, l)
+}
+
+func (s *Server) getTunnelAddr(server, remote net.Addr) (net.Addr, error) {
+	key := tunnelAddrs{Server: server, Remote: remote}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tun := s.tunnels[key]
+
+	// if the tunnel exists and is still alive (confirmed by calling
+	// Touch with a return value of true), use it.
+	if tun != nil && tun.Touch() {
+		return tun.Local, nil
+	}
+
+	// otherwise launch a new Tunnel
+	tun = &Tunnel{
+		// Local will be overwritten once the port is known
+		Local:   defaultLocalAddr,
+		Server:  server,
+		Remote:  remote,
+		Config:  &ssh.ClientConfig{}, // TODO: build default config
+		ErrChan: s.ErrChan,
+	}
+	l, port, err := tun.Listen()
+	if err != nil {
+		return nil, err
+	}
+	tun.Local = &net.TCPAddr{IP: defaultLocalAddr.IP, Port: port}
+	s.tunnels[key] = tun
+
+	// TODO: how to call Serve with a child context from Server
+	_ = l
+
+	return tun.Local, nil
 }
 
 func (s *Server) serve(ctx context.Context, l net.Listener) error {

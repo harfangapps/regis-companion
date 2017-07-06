@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 
 	"bitbucket.org/harfangapps/regis-companion/resp"
 )
@@ -27,9 +28,12 @@ func (c getTunnelAddrCmd) Execute(cmdName string, req []string, s *Server) (inte
 	if err != nil {
 		return resp.Error(fmt.Sprintf("ERR invalid remote server address: %s", err)), nil
 	}
-	_, _ = serverAddr, remoteAddr
 
-	return nil, nil
+	addr, err := s.getTunnelAddr(serverAddr, remoteAddr)
+	if err != nil {
+		return resp.Error(fmt.Sprintf("ERR failed to start tunnel: %v", err)), nil
+	}
+	return addr.String(), nil
 }
 
 func parseAddr(s string, defaultPort int) (net.Addr, error) {
@@ -39,7 +43,7 @@ func parseAddr(s string, defaultPort int) (net.Addr, error) {
 		if defaultPort <= 0 {
 			return nil, err
 		}
-		return HostPortAddr{Host: s, Port: defaultPort}, nil
+		return HostPortAddr{Host: strings.ToLower(s), Port: defaultPort}, nil
 	}
 
 	nPort, err := strconv.Atoi(port)
@@ -50,5 +54,5 @@ func parseAddr(s string, defaultPort int) (net.Addr, error) {
 	if nPort == 0 {
 		nPort = defaultPort
 	}
-	return HostPortAddr{Host: host, Port: nPort}, nil
+	return HostPortAddr{Host: strings.ToLower(host), Port: nPort}, nil
 }
