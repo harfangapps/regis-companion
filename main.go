@@ -14,17 +14,6 @@ import (
 )
 
 var (
-	// git rev-parse --short HEAD
-	gitHash string
-
-	// git describe --tags
-	version string
-
-	// go version
-	goVersion string
-)
-
-var (
 	versionFlag           = flag.Bool("version", false, "Print the version.")
 	addrFlag              = flag.String("addr", "127.0.0.1", "Server `address` to bind to.")
 	portFlag              = flag.Int("port", 7070, "Port `number` to listen on.")
@@ -36,7 +25,8 @@ func main() {
 	flag.Parse()
 
 	if *versionFlag {
-		fmt.Printf("%s (git:%s go:%s)\n", version, gitHash, goVersion)
+		fmt.Printf("%s (git:%s go:%s)\n", server.Version, server.GitHash, server.GoVersion)
+		return
 	}
 
 	ip := net.ParseIP(*addrFlag)

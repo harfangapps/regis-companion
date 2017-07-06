@@ -14,6 +14,18 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Build variables, set when building the binary
+var (
+	// git rev-parse --short HEAD
+	GitHash string
+
+	// git describe --tags
+	Version string
+
+	// go version
+	GoVersion string
+)
+
 var (
 	errEmptyCmd = errors.New("command is empty")
 )
