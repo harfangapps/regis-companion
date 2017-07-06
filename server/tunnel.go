@@ -17,7 +17,7 @@ type dialCloser interface {
 }
 
 // for tests, to be able to mock the SSH dial.
-var sshDialFn func(network, address string, config *ssh.ClientConfig) (dialCloser, error) = defaultSSHDial
+var sshDialFn = defaultSSHDial
 
 // the default SSH dial.
 func defaultSSHDial(network, address string, config *ssh.ClientConfig) (dialCloser, error) {

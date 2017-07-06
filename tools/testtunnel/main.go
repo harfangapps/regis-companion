@@ -92,24 +92,30 @@ func parseAddr(s string, defaultPort int) (net.Addr, error) {
 	if s == "" {
 		return nil, errors.New("missing address")
 	}
-	if host, port, err := net.SplitHostPort(s); err != nil {
+
+	host, port, err := net.SplitHostPort(s)
+	if err != nil {
 		// not host:port, try host only
-		if ip := net.ParseIP(s); ip == nil {
+		ip := net.ParseIP(s)
+		if ip == nil {
 			// not ip, must be a unix path
 			return &net.UnixAddr{Name: s, Net: "unix"}, nil
 		}
 		return &net.TCPAddr{IP: ip, Port: defaultPort}, nil
-
-	} else if ip := net.ParseIP(host); ip == nil {
-		return nil, fmt.Errorf("invalid address: %v", s)
-
-	} else if nPort, err := strconv.Atoi(port); err != nil {
-		return nil, fmt.Errorf("invalid port: %v: %v", port, err)
-
-	} else {
-		if nPort == 0 {
-			nPort = defaultPort
-		}
-		return &net.TCPAddr{IP: ip, Port: nPort}, nil
 	}
+
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return nil, fmt.Errorf("invalid address: %v", s)
+	}
+
+	nPort, err := strconv.Atoi(port)
+	if err != nil {
+		return nil, fmt.Errorf("invalid port: %v: %v", port, err)
+	}
+
+	if nPort == 0 {
+		nPort = defaultPort
+	}
+	return &net.TCPAddr{IP: ip, Port: nPort}, nil
 }
