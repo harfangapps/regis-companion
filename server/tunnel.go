@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -41,6 +42,8 @@ type Tunnel struct {
 
 	// The client configuration to use to connect to Server.
 	Config *ssh.ClientConfig
+	// The idle time before automatically stopping the Tunnel.
+	IdleTimeout time.Duration
 
 	// The channel to send errors to. If nil, the errors are logged.
 	// If the send would block, the error is dropped. It is the responsibility
@@ -108,9 +111,10 @@ func (t *Tunnel) Serve(ctx context.Context, l net.Listener) error {
 
 	t.mu.Lock()
 	t.server = retryServer{
-		Listener: l,
-		Dispatch: t.forward,
-		ErrChan:  t.ErrChan,
+		Listener:    l,
+		Dispatch:    t.forward,
+		ErrChan:     t.ErrChan,
+		IdleTimeout: t.IdleTimeout,
 	}
 	t.mu.Unlock()
 	return t.server.serve(ctx)

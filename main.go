@@ -41,6 +41,7 @@ func main() {
 	signal.Notify(ch, os.Interrupt)
 	go func() {
 		<-ch
+		fmt.Println("received interrupt signal, stopping...")
 		cancel()
 	}()
 

@@ -78,9 +78,10 @@ type Server struct {
 	// Server.
 	ErrChan chan<- error
 
-	// mu protects the map of addresses-to-tunnel
+	// mu protects the map of addresses-to-tunnel and the ctx
 	mu      sync.Mutex
 	tunnels map[tunnelAddrs]*Tunnel
+	ctx     context.Context // stored to pass along to Tunnels
 }
 
 // ListenAndServe starts the server on the specified Addr.
@@ -95,6 +96,13 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	return s.serve(ctx, l)
 }
 
+// getTunnelAddr returns the local address to use to access the SSH tunnel.
+// If a Tunnel exists for the requested server+remote addresses, it is
+// Touched to see if it is still alive, and if so its existing local address
+// is used.
+//
+// Otherwise, a new Tunnel is started for that server+remote pair and that
+// Tunnel's local address is returned.
 func (s *Server) getTunnelAddr(server, remote net.Addr) (net.Addr, error) {
 	key := tunnelAddrs{Server: server, Remote: remote}
 
@@ -111,11 +119,12 @@ func (s *Server) getTunnelAddr(server, remote net.Addr) (net.Addr, error) {
 	// otherwise launch a new Tunnel
 	tun = &Tunnel{
 		// Local will be overwritten once the port is known
-		Local:   defaultLocalAddr,
-		Server:  server,
-		Remote:  remote,
-		Config:  &ssh.ClientConfig{}, // TODO: build default config
-		ErrChan: s.ErrChan,
+		Local:       defaultLocalAddr,
+		Server:      server,
+		Remote:      remote,
+		Config:      &ssh.ClientConfig{}, // TODO: build default config
+		ErrChan:     s.ErrChan,
+		IdleTimeout: s.TunnelIdleTimeout,
 	}
 	l, port, err := tun.Listen()
 	if err != nil {
@@ -124,8 +133,8 @@ func (s *Server) getTunnelAddr(server, remote net.Addr) (net.Addr, error) {
 	tun.Local = &net.TCPAddr{IP: defaultLocalAddr.IP, Port: port}
 	s.tunnels[key] = tun
 
-	// TODO: how to call Serve with a child context from Server
-	_ = l
+	// launch the Tunnel
+	go tun.Serve(s.ctx, l)
 
 	return tun.Local, nil
 }
@@ -133,6 +142,7 @@ func (s *Server) getTunnelAddr(server, remote net.Addr) (net.Addr, error) {
 func (s *Server) serve(ctx context.Context, l net.Listener) error {
 	s.mu.Lock()
 	s.tunnels = make(map[tunnelAddrs]*Tunnel)
+	s.ctx = ctx
 	s.mu.Unlock()
 
 	server := retryServer{
