@@ -50,7 +50,7 @@ func main() {
 
 	// configure and start the server
 	meta := &sshconfig.MetaConfig{
-		KnownHostsFile: *knownHostsFileFlag,
+		KnownHostsFile: os.ExpandEnv(*knownHostsFileFlag),
 		SSHDialTimeout: *sshDialTimeoutFlag,
 	}
 
