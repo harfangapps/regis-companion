@@ -12,24 +12,32 @@ import (
 
 type getTunnelAddrCmd struct{}
 
-// GETTUNNELADDR ssh.server.host[:port] remote.server.host:port
+// GETTUNNELADDR [user@]ssh.server.host[:port] remote.server.host:port
 func (c getTunnelAddrCmd) Execute(cmdName string, req []string, s *Server) (interface{}, error) {
 	if len(req) != 3 {
 		return resp.Error(fmt.Sprintf("ERR wrong number of arguments for %v", cmdName)), nil
 	}
 
+	var user string
+	sshServer := req[1]
+	if i := strings.Index(sshServer, "@"); i > 0 {
+		user = sshServer[:i]
+		sshServer = sshServer[i+1:]
+	}
+
 	// SSH server address, default port to 22
-	serverAddr, err := parseAddr(req[1], 22)
+	serverAddr, err := parseAddr(sshServer, 22)
 	if err != nil {
 		return resp.Error(fmt.Sprintf("ERR invalid SSH server address: %s", err)), nil
 	}
+
 	// remote address, port required
 	remoteAddr, err := parseAddr(req[2], 0)
 	if err != nil {
 		return resp.Error(fmt.Sprintf("ERR invalid remote server address: %s", err)), nil
 	}
 
-	addr, err := s.getTunnelAddr(serverAddr, remoteAddr)
+	addr, err := s.getTunnelAddr(serverAddr, remoteAddr, user)
 	if err != nil {
 		return resp.Error(fmt.Sprintf("ERR failed to start tunnel: %v", err)), nil
 	}

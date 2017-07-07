@@ -9,9 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/crypto/ssh"
-
 	"bitbucket.org/harfangapps/regis-companion/resp"
+	"bitbucket.org/harfangapps/regis-companion/sshconfig"
 
 	"github.com/pkg/errors"
 )
@@ -65,6 +64,8 @@ type tunnelAddrs struct {
 type Server struct {
 	// The address the server listens on.
 	Addr net.Addr
+	// The MetaConfig to use to create SSH ClientConfig.
+	MetaConfig sshconfig.MetaConfig
 
 	// Duration before the tunnels stop if there is no active connection.
 	TunnelIdleTimeout time.Duration
@@ -103,7 +104,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 //
 // Otherwise, a new Tunnel is started for that server+remote pair and that
 // Tunnel's local address is returned.
-func (s *Server) getTunnelAddr(server, remote net.Addr) (net.Addr, error) {
+func (s *Server) getTunnelAddr(server, remote net.Addr, user string) (net.Addr, error) {
 	key := tunnelAddrs{Server: server, Remote: remote}
 
 	s.mu.Lock()
@@ -117,12 +118,17 @@ func (s *Server) getTunnelAddr(server, remote net.Addr) (net.Addr, error) {
 	}
 
 	// otherwise launch a new Tunnel
+	config, err := s.MetaConfig.WithAgent(user)
+	if err != nil {
+		return nil, err
+	}
+
 	tun = &Tunnel{
 		// Local will be overwritten once the port is known
 		Local:       defaultLocalAddr,
 		Server:      server,
 		Remote:      remote,
-		Config:      &ssh.ClientConfig{}, // TODO: build default config
+		Config:      config,
 		ErrChan:     s.ErrChan,
 		IdleTimeout: s.TunnelIdleTimeout,
 	}
