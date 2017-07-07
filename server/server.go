@@ -44,6 +44,7 @@ func init() {
 	supportedCommands = map[string]command{
 		"command":       commandCmd{},
 		"gettunneladdr": getTunnelAddrCmd{},
+		"killtunnel":    killTunnelCmd{},
 		"info":          infoCmd{},
 		"ping":          pingCmd{},
 	}
@@ -55,6 +56,7 @@ func init() {
 }
 
 type tunnelAddrs struct {
+	User   string
 	Server net.Addr
 	Remote net.Addr
 }
@@ -105,7 +107,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 // Otherwise, a new Tunnel is started for that server+remote pair and that
 // Tunnel's local address is returned.
 func (s *Server) getTunnelAddr(server, remote net.Addr, user string) (net.Addr, error) {
-	key := tunnelAddrs{Server: server, Remote: remote}
+	key := tunnelAddrs{User: user, Server: server, Remote: remote}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -124,25 +126,40 @@ func (s *Server) getTunnelAddr(server, remote net.Addr, user string) (net.Addr, 
 	}
 
 	tun = &Tunnel{
-		// Local will be overwritten once the port is known
-		Local:       defaultLocalAddr,
+		// Local will be set once the port is known
 		Server:      server,
 		Remote:      remote,
 		Config:      config,
 		ErrChan:     s.ErrChan,
 		IdleTimeout: s.TunnelIdleTimeout,
 	}
-	l, port, err := tun.Listen()
+	l, port, err := Listen(defaultLocalAddr)
 	if err != nil {
 		return nil, err
 	}
 	tun.Local = &net.TCPAddr{IP: defaultLocalAddr.IP, Port: port}
 	s.tunnels[key] = tun
 
+	// TODO: create child context, store the KillFunc on the Tunnel and
+	// create a killtunnel command.
+
 	// launch the Tunnel
 	go tun.Serve(s.ctx, l)
 
 	return tun.Local, nil
+}
+
+func (s *Server) killTunnel(server, remote net.Addr, user string) error {
+	key := tunnelAddrs{User: user, Server: server, Remote: remote}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tun := s.tunnels[key]
+	if tun == nil {
+		return nil
+	}
+	// TODO: call the KillFunc on the Tunnel, will set it to closed
+	return nil
 }
 
 func (s *Server) serve(ctx context.Context, l net.Listener) error {

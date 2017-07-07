@@ -1,6 +1,5 @@
 # TODOs
 
-- Reload known hosts when the file changes (for hosts added on the fly)
 - Add expvars for introspection
 - Write launchd configuration file
 - Write homebrew recipe in a harfangapps/homebrew-harfangapps repository

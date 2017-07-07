@@ -18,15 +18,7 @@ func (c getTunnelAddrCmd) Execute(cmdName string, req []string, s *Server) (inte
 		return resp.Error(fmt.Sprintf("ERR wrong number of arguments for %v", cmdName)), nil
 	}
 
-	var user string
-	sshServer := req[1]
-	if i := strings.Index(sshServer, "@"); i > 0 {
-		user = sshServer[:i]
-		sshServer = sshServer[i+1:]
-	}
-
-	// SSH server address, default port to 22
-	serverAddr, err := parseAddr(sshServer, 22)
+	user, serverAddr, err := parseSSHUserAddr(req[1])
 	if err != nil {
 		return resp.Error(fmt.Sprintf("ERR invalid SSH server address: %s", err)), nil
 	}
@@ -42,6 +34,20 @@ func (c getTunnelAddrCmd) Execute(cmdName string, req []string, s *Server) (inte
 		return resp.Error(fmt.Sprintf("ERR failed to start tunnel: %v", err)), nil
 	}
 	return addr.String(), nil
+}
+
+func parseSSHUserAddr(s string) (user string, addr net.Addr, err error) {
+	if i := strings.Index(s, "@"); i > 0 {
+		user = s[:i]
+		s = s[i+1:]
+	}
+
+	// SSH server address, default port to 22
+	serverAddr, err := parseAddr(s, 22)
+	if err != nil {
+		return "", nil, err
+	}
+	return user, serverAddr, nil
 }
 
 func parseAddr(s string, defaultPort int) (net.Addr, error) {

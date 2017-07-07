@@ -25,6 +25,25 @@ func defaultSSHDial(network, address string, config *ssh.ClientConfig) (dialClos
 	return ssh.Dial(network, address, config)
 }
 
+// Listen creates a Listener listening on the specified address.
+// It returns the listener, the port it uses (0 if not
+// listening on a TCP address), or an error.
+//
+// The main purpose is to listen on port 0 and let the system
+// select a free TCP port, and then get that port number back.
+// The returned Listener should then be passed to Tunnel.Serve
+// to start accepting connections.
+func Listen(addr net.Addr) (l net.Listener, port int, err error) {
+	l, err = net.Listen(addr.Network(), addr.String())
+	if err != nil {
+		return nil, 0, err
+	}
+	if addr, ok := l.Addr().(*net.TCPAddr); ok {
+		port = addr.Port
+	}
+	return l, port, nil
+}
+
 // Tunnel defines an SSH tunnel. The client connects to the Local
 // address, the server connects via SSH to the Server address,
 // and from there to the Remote address. Config specifies the
@@ -71,25 +90,6 @@ func (t *Tunnel) ListenAndServe(ctx context.Context) error {
 	return t.Serve(ctx, l)
 }
 
-// Listen creates a Listener listening on the Local address of the
-// Tunnel. It returns the listener, the port it uses (0 if not
-// listening on a TCP address), or an error.
-//
-// The main purpose is to listen on port 0 and let the system
-// select a free TCP port, and then get that port number back.
-// The returned Listener should then be passed to Tunnel.Serve
-// to start accepting connections.
-func (t *Tunnel) Listen() (l net.Listener, port int, err error) {
-	l, err = net.Listen(t.Local.Network(), t.Local.String())
-	if err != nil {
-		return nil, 0, err
-	}
-	if addr, ok := l.Addr().(*net.TCPAddr); ok {
-		port = addr.Port
-	}
-	return l, port, nil
-}
-
 // Closed indicates if the Tunnel started and then stopped serving.
 func (t *Tunnel) Closed() bool {
 	t.mu.Lock()
@@ -110,6 +110,11 @@ func (t *Tunnel) Serve(ctx context.Context, l net.Listener) error {
 	}()
 
 	t.mu.Lock()
+	if t.closed {
+		t.mu.Unlock()
+		return errors.New("tunnel closed")
+	}
+
 	t.server = retryServer{
 		Listener:    l,
 		Dispatch:    t.forward,
@@ -117,6 +122,7 @@ func (t *Tunnel) Serve(ctx context.Context, l net.Listener) error {
 		IdleTimeout: t.IdleTimeout,
 	}
 	t.mu.Unlock()
+
 	return t.server.serve(ctx)
 }
 
@@ -148,6 +154,7 @@ func (t *Tunnel) forward(ctx context.Context, serverWg *sync.WaitGroup, local ne
 	// SSH connect to the server
 	server, err := sshDialFn(t.Server.Network(), t.Server.String(), t.Config)
 	if err != nil {
+		// TODO: if not temporary, should probably bring down the whole tunnel
 		handleError(errors.Wrap(err, "ssh server dial error"), t.ErrChan)
 		return
 	}
@@ -156,6 +163,7 @@ func (t *Tunnel) forward(ctx context.Context, serverWg *sync.WaitGroup, local ne
 	// connect to the remote address via the SSH server
 	remote, err := server.Dial(t.Remote.Network(), t.Remote.String())
 	if err != nil {
+		// TODO: if not temporary, should probably bring down the whole tunnel
 		handleError(errors.Wrap(err, "ssh remote dial error"), t.ErrChan)
 		return
 	}
