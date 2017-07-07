@@ -65,7 +65,7 @@ type Server struct {
 	// The address the server listens on.
 	Addr net.Addr
 	// The MetaConfig to use to create SSH ClientConfig.
-	MetaConfig sshconfig.MetaConfig
+	MetaConfig *sshconfig.MetaConfig
 
 	// Duration before the tunnels stop if there is no active connection.
 	TunnelIdleTimeout time.Duration
