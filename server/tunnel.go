@@ -70,9 +70,10 @@ type Tunnel struct {
 	ErrChan chan<- error
 
 	// mu protects the following private fields
-	mu     sync.Mutex
-	server retryServer
-	closed bool
+	mu        sync.Mutex
+	sshClient dialCloser
+	server    retryServer
+	closed    bool
 }
 
 // ListenAndServe sets up the Tunnel by connecting via
@@ -152,6 +153,9 @@ func (t *Tunnel) forward(ctx context.Context, serverWg *sync.WaitGroup, local ne
 	}()
 
 	// SSH connect to the server
+	// TODO: do this just once in Serve, and reuse the same dialCloser to dial
+	// new connections to Remote.
+
 	server, err := sshDialFn(t.Server.Network(), t.Server.String(), t.Config)
 	if err != nil {
 		// TODO: if not temporary, should probably bring down the whole tunnel
