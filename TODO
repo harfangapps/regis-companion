@@ -6,6 +6,49 @@
 - Test that it closes tunnels after idle timeout
 - Test that it closes everything on cancel context
 
+## Design
+
+* Server
+  - Talks the Redis protocol
+  - Listens on a predefined TCP port
+  - Always keeps running
+  - Can be started with launchd (RunAtLaunch)
+  - Starts tunnels as required
+  - Maintains registry of active tunnels
+  - Is a server, retries on temporary errors
+
+* SSHClient
+  - Unique per user@sshserver:port
+  - Creates tunnels that must connect through that SSH
+  - Exits immediately when it has no active tunnels
+    • WaitGroup incremented on Dial, Done on close of that conn
+    • No need for an idle timeout as tunnels have one anyway
+  - When a new SSHClient is created, it is for a tunnel, so it is active
+
+* Tunnel
+  - Has an SSHClient, a Remote address, and creates a Local address
+    • Or optionnally has an explicit local address set
+  - Is a server, retries on temporary errors
+  - Exits when it has no active connection after an idle timeout
+    • Not immediately, because it could still be used in a moment
+    • E.g. in a Cluster, currently connected on another host, could
+      come back any time.
+
+* RetryServer
+  - Implements the common core of a TCP server
+  - Retries temporary errors
+  - Dispatches accepted connections to a func
+  - Keeps track of active connections, exits only when all are terminated
+  - Context-based
+
+* IdleTracker
+  - Has a current and previous atomic counters and a timeout duration
+  - Created with a cancel() function that cancels a context
+  - Can wrap a net.Conn with an implementation that tracks read/write activity
+  - Has a Touch() method to update the activity
+  - Launches a goroutine that checks the activity at IdleTimeout frequency
+  - Goroutine must be launched in the WaitGroup of the parent, and receive the parent's context
+
 ## Guidelines
 
 * Subcommand to register itself as launchd service, confirm executable location (or test if absolute path is necessary)
@@ -18,3 +61,5 @@
   - Regis could check for companion updates and display a message when a new version is available.
 
 * Test logging via launchd, seems to output in /var/log/system.log?
+  - Do the same as the Regis homebrew recipe, writes logs to files
+
