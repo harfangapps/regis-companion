@@ -1,12 +1,9 @@
 package server
 
 import (
-	"errors"
 	"fmt"
-	"net"
-	"strconv"
-	"strings"
 
+	"bitbucket.org/harfangapps/regis-companion/addr"
 	"bitbucket.org/harfangapps/regis-companion/resp"
 )
 
@@ -18,13 +15,13 @@ func (c getTunnelAddrCmd) Execute(cmdName string, req []string, s *Server) (inte
 		return resp.Error(fmt.Sprintf("ERR wrong number of arguments for %v", cmdName)), nil
 	}
 
-	user, serverAddr, err := parseSSHUserAddr(req[1])
+	user, serverAddr, err := addr.ParseSSHUserAddr(req[1])
 	if err != nil {
 		return resp.Error(fmt.Sprintf("ERR invalid SSH server address: %s", err)), nil
 	}
 
 	// remote address, port required
-	remoteAddr, err := parseAddr(req[2], 0)
+	remoteAddr, err := addr.ParseAddr(req[2], 0)
 	if err != nil {
 		return resp.Error(fmt.Sprintf("ERR invalid remote server address: %s", err)), nil
 	}
@@ -34,39 +31,4 @@ func (c getTunnelAddrCmd) Execute(cmdName string, req []string, s *Server) (inte
 		return resp.Error(fmt.Sprintf("ERR failed to start tunnel: %v", err)), nil
 	}
 	return addr.String(), nil
-}
-
-func parseSSHUserAddr(s string) (user string, addr net.Addr, err error) {
-	if i := strings.Index(s, "@"); i > 0 {
-		user = s[:i]
-		s = s[i+1:]
-	}
-
-	// SSH server address, default port to 22
-	serverAddr, err := parseAddr(s, 22)
-	if err != nil {
-		return "", nil, err
-	}
-	return user, serverAddr, nil
-}
-
-func parseAddr(s string, defaultPort int) (net.Addr, error) {
-	host, port, err := net.SplitHostPort(s)
-	if err != nil {
-		// if port is required, return that error
-		if defaultPort <= 0 {
-			return nil, err
-		}
-		return HostPortAddr{Host: strings.ToLower(s), Port: defaultPort}, nil
-	}
-
-	nPort, err := strconv.Atoi(port)
-	if err != nil {
-		return nil, errors.New("invalid port number")
-	}
-
-	if nPort == 0 {
-		nPort = defaultPort
-	}
-	return HostPortAddr{Host: strings.ToLower(host), Port: nPort}, nil
 }

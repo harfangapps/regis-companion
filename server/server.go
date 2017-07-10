@@ -9,8 +9,11 @@ import (
 	"sync"
 	"time"
 
+	"bitbucket.org/harfangapps/regis-companion/addr"
+	"bitbucket.org/harfangapps/regis-companion/common"
 	"bitbucket.org/harfangapps/regis-companion/resp"
 	"bitbucket.org/harfangapps/regis-companion/sshconfig"
+	"bitbucket.org/harfangapps/regis-companion/tunnel"
 
 	"github.com/pkg/errors"
 )
@@ -55,10 +58,10 @@ func init() {
 	sort.Strings(commandNames)
 }
 
-type tunnelAddrs struct {
+type tunnelKey struct {
 	User   string
-	Server net.Addr
-	Remote net.Addr
+	Server addr.HostPortAddr
+	Remote addr.HostPortAddr
 }
 
 // Server defines the regis-companion Server that listens for incoming connections
@@ -81,9 +84,11 @@ type Server struct {
 	// Server.
 	ErrChan chan<- error
 
+	server common.RetryServer
+
 	// mu protects the map of addresses-to-tunnel and the ctx
 	mu      sync.Mutex
-	tunnels map[tunnelAddrs]*Tunnel
+	tunnels map[tunnelKey]*tunnel.Tunnel
 	ctx     context.Context // stored to pass along to Tunnels
 }
 
@@ -164,28 +169,26 @@ func (s *Server) killTunnel(server, remote net.Addr, user string) error {
 
 func (s *Server) serve(ctx context.Context, l net.Listener) error {
 	s.mu.Lock()
-	s.tunnels = make(map[tunnelAddrs]*Tunnel)
+	s.tunnels = make(map[tunnelKey]*tunnel.Tunnel)
 	s.ctx = ctx
+	s.server.Dispatch = s.serveConn
+	s.server.ErrChan = s.ErrChan
+	s.server.Listener = l
 	s.mu.Unlock()
 
-	server := retryServer{
-		Listener: l,
-		Dispatch: s.serveConn,
-		ErrChan:  s.ErrChan,
-	}
-	return server.serve(ctx)
+	return s.server.serve(ctx)
 }
 
-func (s *Server) serveConn(ctx context.Context, serverWg *sync.WaitGroup, conn net.Conn) {
+func (s *Server) serveConn(ctx context.Context, d common.Doer, conn net.Conn) {
 	wg := &sync.WaitGroup{}
 	ctx, cancel := context.WithCancel(ctx)
 	done := ctx.Done()
 
 	defer func() {
-		conn.Close()    // close the serviced connection
-		cancel()        // required to release resources
-		wg.Wait()       // wait for sub-goroutines to exit
-		serverWg.Done() // signal the server that this connection is done
+		conn.Close() // close the serviced connection
+		cancel()     // required to release resources
+		wg.Wait()    // wait for readWriteLoop goroutine to exit
+		d.Done()     // signal the server that this connection is done
 	}()
 
 	wg.Add(1)
@@ -195,10 +198,10 @@ func (s *Server) serveConn(ctx context.Context, serverWg *sync.WaitGroup, conn n
 	<-done
 }
 
-func (s *Server) readWriteLoop(cancel func(), wg *sync.WaitGroup, conn net.Conn) {
+func (s *Server) readWriteLoop(cancel func(), d common.Doer, conn net.Conn) {
 	defer func() {
 		cancel()
-		wg.Done()
+		d.Done()
 	}()
 
 	dec := resp.NewDecoder(conn)
