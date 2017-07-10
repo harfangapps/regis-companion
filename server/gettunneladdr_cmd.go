@@ -26,7 +26,7 @@ func (c getTunnelAddrCmd) Execute(cmdName string, req []string, s *Server) (inte
 		return resp.Error(fmt.Sprintf("ERR invalid remote server address: %s", err)), nil
 	}
 
-	addr, err := s.getTunnelAddr(serverAddr, remoteAddr, user)
+	addr, err := s.getTunnelAddr(user, serverAddr, remoteAddr)
 	if err != nil {
 		return resp.Error(fmt.Sprintf("ERR failed to start tunnel: %v", err)), nil
 	}

@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"expvar"
 	"fmt"
 	"net"
 	"os"
@@ -95,7 +96,16 @@ func (c infoCmd) Execute(cmdName string, req []string, s *Server) (interface{}, 
 		fmt.Fprintf(&buf, "gomaxprocs:%d\r\n", runtime.GOMAXPROCS(0))
 	}
 
-	// TODO: stats and clients sections, using expvar
+	if m := s.Stats; m != nil && (section == "stats" || section == "") {
+		if buf.Len() > 0 {
+			fmt.Fprint(&buf, "\r\n")
+		}
+
+		fmt.Fprint(&buf, "# Stats\r\n")
+		m.Do(func(kv expvar.KeyValue) {
+			fmt.Fprintf(&buf, "%s:%v\r\n", kv.Key, kv.Value)
+		})
+	}
 
 	return buf.Bytes(), nil
 }

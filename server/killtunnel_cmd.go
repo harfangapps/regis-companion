@@ -26,7 +26,7 @@ func (c killTunnelCmd) Execute(cmdName string, req []string, s *Server) (interfa
 		return resp.Error(fmt.Sprintf("ERR invalid remote server address: %s", err)), nil
 	}
 
-	if err := s.killTunnel(serverAddr, remoteAddr, user); err != nil {
+	if err := s.killTunnel(user, serverAddr, remoteAddr); err != nil {
 		return resp.Error(fmt.Sprintf("ERR failed to kill tunnel: %v", err)), nil
 	}
 	return resp.OK{}, nil

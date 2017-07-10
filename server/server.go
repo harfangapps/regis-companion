@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"expvar"
 	"fmt"
 	"net"
 	"sort"
@@ -77,6 +78,10 @@ type Server struct {
 	// Write timeout before returning a network error on a write attempt.
 	WriteTimeout time.Duration
 
+	// If not nil, this is an expvar map that contains statistics about the server,
+	// tunnels and connections.
+	Stats *expvar.Map
+
 	// The channel to send errors to. If nil, the errors are logged.
 	// If the send would block, the error is dropped. It is the responsibility
 	// of the caller to close the channel once the Server is stopped.
@@ -111,16 +116,17 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 //
 // Otherwise, a new Tunnel is started for that server+remote pair and that
 // Tunnel's local address is returned.
-func (s *Server) getTunnelAddr(server, remote net.Addr, user string) (net.Addr, error) {
-	key := tunnelAddrs{User: user, Server: server, Remote: remote}
+func (s *Server) getTunnelAddr(user string, server, remote addr.HostPortAddr) (net.Addr, error) {
+	key := tunnelKey{User: user, Server: server, Remote: remote}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	tun := s.tunnels[key]
 
 	// if the tunnel exists and is still alive (confirmed by calling
 	// Touch with a return value of true), use it.
-	if tun != nil && tun.Touch() {
+	if tun.Touch() {
 		return tun.Local, nil
 	}
 
@@ -130,40 +136,56 @@ func (s *Server) getTunnelAddr(server, remote net.Addr, user string) (net.Addr, 
 		return nil, err
 	}
 
-	tun = &Tunnel{
-		// Local will be set once the port is known
-		Server:      server,
-		Remote:      remote,
-		Config:      config,
-		ErrChan:     s.ErrChan,
-		IdleTimeout: s.TunnelIdleTimeout,
-	}
-	l, port, err := Listen(defaultLocalAddr)
+	// get the port for this new tunnel
+	l, port, err := addr.Listen(defaultLocalAddr)
 	if err != nil {
 		return nil, err
 	}
-	tun.Local = &net.TCPAddr{IP: defaultLocalAddr.IP, Port: port}
+
+	// context specific for this tunnel
+	ctx, cancel := context.WithCancel(s.ctx)
+	tun = &tunnel.Tunnel{
+		SSH:         server,
+		Config:      config,
+		Local:       &net.TCPAddr{IP: defaultLocalAddr.IP, Port: port},
+		Remote:      remote,
+		IdleTimeout: s.TunnelIdleTimeout,
+		Stats:       s.Stats,
+		ErrChan:     s.ErrChan,
+		KillFunc:    cancel,
+	}
+
 	s.tunnels[key] = tun
 
-	// TODO: create child context, store the KillFunc on the Tunnel and
-	// create a killtunnel command.
-
 	// launch the Tunnel
-	go tun.Serve(s.ctx, l)
+	go s.serveTunnel(ctx, tun, l)
 
 	return tun.Local, nil
 }
 
-func (s *Server) killTunnel(server, remote net.Addr, user string) error {
-	key := tunnelAddrs{User: user, Server: server, Remote: remote}
+func (s *Server) serveTunnel(ctx context.Context, tun *tunnel.Tunnel, l net.Listener) {
+	defer func() {
+		tun.KillFunc()
+	}()
+
+	if err := tun.Serve(ctx, l); err != nil {
+		err = errors.Wrap(err, "tunnel serve error")
+		common.HandleError(err, s.ErrChan)
+		return
+	}
+}
+
+func (s *Server) killTunnel(user string, server, remote addr.HostPortAddr) error {
+	key := tunnelKey{User: user, Server: server, Remote: remote}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	tun := s.tunnels[key]
 	if tun == nil {
 		return nil
 	}
-	// TODO: call the KillFunc on the Tunnel, will set it to closed
+	tun.KillFunc()
 	return nil
 }
 
@@ -176,10 +198,10 @@ func (s *Server) serve(ctx context.Context, l net.Listener) error {
 	s.server.Listener = l
 	s.mu.Unlock()
 
-	return s.server.serve(ctx)
+	return s.server.Serve(ctx)
 }
 
-func (s *Server) serveConn(ctx context.Context, d common.Doer, conn net.Conn) {
+func (s *Server) serveConn(ctx context.Context, d common.Doner, conn net.Conn) {
 	wg := &sync.WaitGroup{}
 	ctx, cancel := context.WithCancel(ctx)
 	done := ctx.Done()
@@ -198,7 +220,7 @@ func (s *Server) serveConn(ctx context.Context, d common.Doer, conn net.Conn) {
 	<-done
 }
 
-func (s *Server) readWriteLoop(cancel func(), d common.Doer, conn net.Conn) {
+func (s *Server) readWriteLoop(cancel func(), d common.Doner, conn net.Conn) {
 	defer func() {
 		cancel()
 		d.Done()
@@ -211,7 +233,7 @@ func (s *Server) readWriteLoop(cancel func(), d common.Doer, conn net.Conn) {
 		req, err := dec.DecodeRequest()
 		if err != nil {
 			err = errors.Wrap(err, "decode request error")
-			handleError(err, s.ErrChan)
+			common.HandleError(err, s.ErrChan)
 			return
 		}
 
@@ -219,7 +241,7 @@ func (s *Server) readWriteLoop(cancel func(), d common.Doer, conn net.Conn) {
 		res, err := s.execute(req)
 		if err != nil {
 			err = errors.Wrap(err, "execute request error")
-			handleError(err, s.ErrChan)
+			common.HandleError(err, s.ErrChan)
 			return
 		}
 
@@ -227,13 +249,13 @@ func (s *Server) readWriteLoop(cancel func(), d common.Doer, conn net.Conn) {
 		if s.WriteTimeout > 0 {
 			if err := conn.SetWriteDeadline(time.Now().Add(s.WriteTimeout)); err != nil {
 				err = errors.Wrap(err, "set write deadline")
-				handleError(err, s.ErrChan)
+				common.HandleError(err, s.ErrChan)
 				return
 			}
 		}
 		if err := enc.Encode(res); err != nil {
 			err = errors.Wrap(err, "encode response error")
-			handleError(err, s.ErrChan)
+			common.HandleError(err, s.ErrChan)
 			return
 		}
 	}

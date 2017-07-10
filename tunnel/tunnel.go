@@ -40,6 +40,8 @@ const (
 type Tunnel struct {
 	// The address of the SSH server.
 	SSH net.Addr
+	// Config is the configuration to use to dial to the SSH server.
+	Config *ssh.ClientConfig
 	// The local address on which the tunnel is exposed.
 	Local net.Addr
 	// The remote address to connect to via the SSH connection.
@@ -53,6 +55,8 @@ type Tunnel struct {
 	// If the send would block, the error is dropped. It is the responsibility
 	// of the caller to close the channel once the Tunnel is stopped.
 	ErrChan chan<- error
+	// The function to cancel the context of the Tunnel.
+	KillFunc func()
 
 	server common.RetryServer
 	client dialCloser
@@ -66,6 +70,10 @@ type Tunnel struct {
 // due to inactivity. It returns true if the tunnel was active when
 // this was called, false otherwise.
 func (t *Tunnel) Touch() bool {
+	if t == nil {
+		return false
+	}
+
 	t.mu.Lock()
 	if t.state != started {
 		t.mu.Unlock()
@@ -79,7 +87,7 @@ func (t *Tunnel) Touch() bool {
 
 // Serve starts the tunnel's server on the local address. It is a blocking
 // call that always returns an error.
-func (t *Tunnel) Serve(ctx context.Context, l net.Listener, config *ssh.ClientConfig) error {
+func (t *Tunnel) Serve(ctx context.Context, l net.Listener) error {
 	t.mu.Lock()
 	switch t.state {
 	case none:
@@ -115,7 +123,7 @@ func (t *Tunnel) Serve(ctx context.Context, l net.Listener, config *ssh.ClientCo
 	}()
 
 	// connect to the SSH server and store the dialCloser
-	client, err := sshDialFunc(t.SSH.Network(), t.SSH.String(), config)
+	client, err := sshDialFunc(t.SSH.Network(), t.SSH.String(), t.Config)
 	if err != nil {
 		return err
 	}
