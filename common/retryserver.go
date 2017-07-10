@@ -27,6 +27,7 @@ type RetryServer struct {
 	Listener net.Listener
 
 	// The function to call in a goroutine to serve accepted connections.
+	// On exit, the function should always close conn and call d.Done.
 	Dispatch func(ctx context.Context, d Doner, conn net.Conn)
 
 	// If non-nil, errors are reported on that channel. If the send would
@@ -95,10 +96,10 @@ func (s *RetryServer) Serve(ctx context.Context) error {
 		// reset the retry delay
 		delay = 0
 
-		// keep track of that goroutine
-		s.wg.Add(1)
 		// signal activity
 		s.IdleTracker.Touch()
+		// keep track of that goroutine
+		s.wg.Add(1)
 		go s.Dispatch(ctx, &s.wg, s.IdleTracker.TrackConn(conn))
 	}
 }
