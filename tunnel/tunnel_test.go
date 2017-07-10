@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"net"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -112,25 +114,21 @@ func TestStopUnblocksAccept(t *testing.T) {
 	}
 }
 
-/*
-// Stopping the Tunnel unblocks the active local and remote connections.
-func TestStopUnblockConnection(t *testing.T) {
-	// the close channel for the connections, shared because only the
-	// local connection is closed, so to unblock the remote connection
-	// it must use the same channel.
-	closeChan := make(chan struct{})
+// Cancelling the context unblocks the active local and remote connections.
+func TestCancelUnblockConnection(t *testing.T) {
 	readWriteErr := errors.New("read-write")
 	newBlockingConn := func() net.Conn {
+		close := make(chan struct{})
 		return &testutils.MockConn{
 			ReadFunc: func(i int, b []byte) (int, error) {
-				<-closeChan // block until close
+				<-close // block until close
 				return 0, readWriteErr
 			},
 			WriteFunc: func(i int, b []byte) (int, error) {
-				<-closeChan // block until close
+				<-close // block until close
 				return 0, readWriteErr
 			},
-			CloseChan: closeChan,
+			CloseChan: close,
 		}
 	}
 
@@ -140,14 +138,7 @@ func TestStopUnblockConnection(t *testing.T) {
 			return newBlockingConn(), nil
 		},
 	}
-	sshDialFn = func(n, addr string, config *ssh.ClientConfig) (dialCloser, error) {
-		return sshClient, nil
-	}
-	defer func() { sshDialFn = defaultSSHDial }()
-
-	// the tunnel to test
-	errChan := make(chan error, 1)
-	tun := &Tunnel{Local: tcpAddr, Server: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
+	defer setAndDeferSSHDial(mockSSHDial(sshClient))()
 
 	listenerCloseChan := make(chan struct{})
 	listener := &testutils.MockListener{
@@ -161,6 +152,10 @@ func TestStopUnblockConnection(t *testing.T) {
 		},
 		CloseChan: listenerCloseChan,
 	}
+
+	// the tunnel to test
+	errChan := make(chan error, 1)
+	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
 
 	// start the tunnel in a goroutine and stop it after a while
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -203,22 +198,19 @@ func TestStopUnblockConnection(t *testing.T) {
 
 // Accept error (non temporary) stops all active connections and returns.
 func TestAcceptErrorUnblockConnection(t *testing.T) {
-	// the close channel for the connections, shared because only the
-	// local connection is closed, so to unblock the remote connection
-	// it must use the same channel.
-	closeChan := make(chan struct{})
 	readWriteErr := errors.New("read-write")
 	newBlockingConn := func() net.Conn {
+		close := make(chan struct{})
 		return &testutils.MockConn{
 			ReadFunc: func(i int, b []byte) (int, error) {
-				<-closeChan // block until close
+				<-close // block until close
 				return 0, readWriteErr
 			},
 			WriteFunc: func(i int, b []byte) (int, error) {
-				<-closeChan // block until close
+				<-close // block until close
 				return 0, readWriteErr
 			},
-			CloseChan: closeChan,
+			CloseChan: close,
 		}
 	}
 
@@ -228,14 +220,7 @@ func TestAcceptErrorUnblockConnection(t *testing.T) {
 			return newBlockingConn(), nil
 		},
 	}
-	sshDialFn = func(n, addr string, config *ssh.ClientConfig) (dialCloser, error) {
-		return sshClient, nil
-	}
-	defer func() { sshDialFn = defaultSSHDial }()
-
-	// the tunnel to test
-	errChan := make(chan error, 1)
-	tun := &Tunnel{Local: tcpAddr, Server: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
+	defer setAndDeferSSHDial(mockSSHDial(sshClient))()
 
 	listener := &testutils.MockListener{
 		AcceptFunc: func(i int) (net.Conn, error) {
@@ -247,6 +232,10 @@ func TestAcceptErrorUnblockConnection(t *testing.T) {
 			return nil, io.EOF
 		},
 	}
+
+	// the tunnel to test
+	errChan := make(chan error, 1)
+	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
 
 	// start the tunnel in a goroutine and stop it after a while, should return earlier than that
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -299,69 +288,41 @@ func TestAcceptErrorUnblockConnection(t *testing.T) {
 	}
 }
 
-// An error returned by the SSH Dial call closes the accepted connection.
+// An error returned by the SSH Dial fails in the call to Serve.
 func TestSSHDialError(t *testing.T) {
-	sshErr := errors.New("ssh")
-	sshDialFn = func(n, addr string, config *ssh.ClientConfig) (dialCloser, error) {
-		return nil, sshErr
-	}
-	defer func() { sshDialFn = defaultSSHDial }()
+	defer setAndDeferSSHDial(errSSHDial)()
+
+	listener := &testutils.MockListener{}
 
 	// the tunnel to test
 	errChan := make(chan error, 1)
-	tun := &Tunnel{Local: tcpAddr, Server: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
-
-	theConn := &testutils.MockConn{}
-	closeChan := make(chan struct{})
-	listener := &testutils.MockListener{
-		AcceptFunc: func(i int) (net.Conn, error) {
-			// return one connection, then block until close
-			if i == 0 {
-				return theConn, nil
-			}
-			<-closeChan
-			return nil, io.EOF
-		},
-		CloseChan: closeChan,
-	}
+	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
 
 	// start the tunnel in a goroutine and close it after a while
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	wg := sync.WaitGroup{}
-	wg.Add(2)
-	go func() {
-		if err := tun.Serve(ctx, listener); errors.Cause(err) != io.EOF {
-			t.Errorf("want io.EOF, got %v", err)
-		}
-		close(errChan)
-		wg.Done()
-	}()
-	// start the goroutine to process errors
-	go func() {
-		var n int
-		for err := range errChan {
-			if errors.Cause(err) != sshErr {
-				t.Errorf("want %v, got %v", sshErr, err)
-			}
-			n++
-		}
-		if n != 1 {
-			t.Errorf("want 1 error, got %v", n)
-		}
-		wg.Done()
-	}()
+	start := time.Now()
+	if err := tun.Serve(ctx, listener); errors.Cause(err) != io.EOF {
+		t.Errorf("want io.EOF, got %v", err)
+	}
 
-	wg.Wait()
+	duration := time.Since(start)
+	want := time.Duration(0)
+	if duration < want || duration > (want+(10*time.Millisecond)) {
+		t.Errorf("want duration of %v, got %v", want, duration)
+	}
 
-	if n := theConn.CloseCalls(); n != 1 {
-		t.Errorf("want localConn.Close to be called once, got %v", n)
+	if n := listener.CloseCalls(); n != 0 {
+		t.Errorf("want Listener.Close to be called 0 times, got %v", n)
+	}
+	if n := listener.AcceptCalls(); n != 0 {
+		t.Errorf("want Listener.Accept to be called 0 times, got %v", n)
 	}
 }
 
 // An error returned by the server SSH client Dial call closes the local
-// connection and the SSH server connection.
+// connection.
 func TestServerDialError(t *testing.T) {
 	sshErr := errors.New("ssh")
 	sshClient := &testutils.MockSSHClient{
@@ -369,14 +330,7 @@ func TestServerDialError(t *testing.T) {
 			return nil, sshErr
 		},
 	}
-	sshDialFn = func(n, addr string, config *ssh.ClientConfig) (dialCloser, error) {
-		return sshClient, nil
-	}
-	defer func() { sshDialFn = defaultSSHDial }()
-
-	// the tunnel to test
-	errChan := make(chan error, 1)
-	tun := &Tunnel{Local: tcpAddr, Server: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
+	defer setAndDeferSSHDial(mockSSHDial(sshClient))()
 
 	theConn := &testutils.MockConn{}
 	closeChan := make(chan struct{})
@@ -391,6 +345,10 @@ func TestServerDialError(t *testing.T) {
 		},
 		CloseChan: closeChan,
 	}
+
+	// the tunnel to test
+	errChan := make(chan error, 1)
+	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
 
 	// start the tunnel in a goroutine and close it after a while
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -458,14 +416,7 @@ func TestRecordForwarding(t *testing.T) {
 			return newRecordingConn(), nil
 		},
 	}
-	sshDialFn = func(n, addr string, config *ssh.ClientConfig) (dialCloser, error) {
-		return sshClient, nil
-	}
-	defer func() { sshDialFn = defaultSSHDial }()
-
-	// the tunnel to test
-	errChan := make(chan error, 1)
-	tun := &Tunnel{Local: tcpAddr, Server: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
+	defer setAndDeferSSHDial(mockSSHDial(sshClient))()
 
 	listenerCloseChan := make(chan struct{})
 	listener := &testutils.MockListener{
@@ -479,6 +430,10 @@ func TestRecordForwarding(t *testing.T) {
 		},
 		CloseChan: listenerCloseChan,
 	}
+
+	// the tunnel to test
+	errChan := make(chan error, 1)
+	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
 
 	// start the tunnel in a goroutine and close it after a while
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -509,4 +464,19 @@ func TestRecordForwarding(t *testing.T) {
 		t.Errorf("want %q, got: %q", want, s)
 	}
 }
-*/
+
+func TestServeAlreadyServing(t *testing.T) {
+	t.Skip()
+}
+
+func TestServeClosed(t *testing.T) {
+	t.Skip()
+}
+
+func TestTouchNil(t *testing.T) {
+	t.Skip()
+}
+
+func TestTouchStarted(t *testing.T) {
+	t.Skip()
+}
