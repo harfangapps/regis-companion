@@ -23,7 +23,7 @@
   - Creates tunnels that must connect through that SSH
   - Maintains a registry of active Tunnels
   - Exits immediately when it has no active tunnels
-    • WaitGroup incremented on Dial, Done on close of that conn
+    • WaitGroup incremented on call to Tunnel.Serve, done on exit
     • No need for an idle timeout as tunnels have one anyway
   - When a new SSHClient is created, it is for a tunnel, so it is active
 
