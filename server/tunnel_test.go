@@ -1,19 +1,6 @@
 package server
 
-import (
-	"context"
-	"io"
-	"net"
-	"strings"
-	"sync"
-	"testing"
-	"time"
-
-	"bitbucket.org/harfangapps/regis-companion/internal/testutils"
-	"github.com/pkg/errors"
-	"golang.org/x/crypto/ssh"
-)
-
+/*
 // arbitrary valid address
 var tcpAddr = &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8000}
 
@@ -466,3 +453,4 @@ func TestRecordForwarding(t *testing.T) {
 		t.Errorf("want %q, got: %q", want, s)
 	}
 }
+*/

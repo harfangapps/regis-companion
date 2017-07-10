@@ -12,10 +12,11 @@ import (
 	"strconv"
 	"time"
 
+	"bitbucket.org/harfangapps/regis-companion/addr"
+	"bitbucket.org/harfangapps/regis-companion/tunnel"
+
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
-
-	"bitbucket.org/harfangapps/regis-companion/server"
 )
 
 var (
@@ -24,6 +25,7 @@ var (
 	remoteAddrFlag     = flag.String("remote-addr", "", "Remote server `address`.")
 	sshUserFlag        = flag.String("ssh-user", "", "SSH `user` to connect with.")
 	sshDialTimeoutFlag = flag.Duration("ssh-dial-timeout", 5*time.Second, "SSH dial `timeout`.")
+	idleTimeoutFlag    = flag.Duration("idle-timeout", 30*time.Second, "Tunnel idle `timeout`.")
 )
 
 func main() {
@@ -69,14 +71,20 @@ func main() {
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
-	tun := &server.Tunnel{
-		Local:  local,
-		Server: svr,
-		Remote: remote,
-		Config: config,
+	l, _, err := addr.Listen(local)
+	if err != nil {
+		log.Fatalf("listen failed: %v", err)
 	}
-	if err := tun.ListenAndServe(ctx); err != nil {
-		log.Fatalf("ListenAndServe error: %v", err)
+
+	tun := &tunnel.Tunnel{
+		SSH:         svr,
+		Config:      config,
+		Local:       local,
+		Remote:      remote,
+		IdleTimeout: *idleTimeoutFlag,
+	}
+	if err := tun.Serve(ctx, l); err != nil {
+		log.Fatalf("Serve error: %v", err)
 	}
 }
 

@@ -155,18 +155,15 @@ func (s *Server) getTunnelAddr(user string, server, remote addr.HostPortAddr) (n
 		KillFunc:    cancel,
 	}
 
-	s.tunnels[key] = tun
-
 	// launch the Tunnel
+	s.tunnels[key] = tun
 	go s.serveTunnel(ctx, tun, l)
 
 	return tun.Local, nil
 }
 
 func (s *Server) serveTunnel(ctx context.Context, tun *tunnel.Tunnel, l net.Listener) {
-	defer func() {
-		tun.KillFunc()
-	}()
+	defer tun.KillFunc()
 
 	if err := tun.Serve(ctx, l); err != nil {
 		err = errors.Wrap(err, "tunnel serve error")
@@ -262,6 +259,10 @@ func (s *Server) readWriteLoop(cancel func(), d common.Doner, conn net.Conn) {
 }
 
 func (s *Server) execute(req []string) (interface{}, error) {
+	if s.Stats != nil {
+		s.Stats.Add("commands_executed", 1)
+	}
+
 	if len(req) == 0 {
 		return nil, errEmptyCmd
 	}

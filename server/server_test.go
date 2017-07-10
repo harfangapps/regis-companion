@@ -1,17 +1,6 @@
 package server
 
-import (
-	"context"
-	"io"
-	"net"
-	"sync"
-	"testing"
-	"time"
-
-	"bitbucket.org/harfangapps/regis-companion/internal/testutils"
-	"github.com/pkg/errors"
-)
-
+/*
 // Stopping a started Server returns the error returned from Listener.Accept.
 func TestStopUnblocksServerAccept(t *testing.T) {
 	srv := &Server{Addr: tcpAddr}
@@ -116,3 +105,4 @@ func TestStopServerUnblockConnection(t *testing.T) {
 func TestExecuteRequests(t *testing.T) {
 	t.Skip()
 }
+*/
