@@ -126,6 +126,10 @@ func (t *Tunnel) forward(ctx context.Context, d common.Doner, local net.Conn) {
 		d.Done() // notify parent that this connection is done
 	}()
 
+	// TODO: instead use a pool of SSH clients for a given address, and try
+	// twice: once with the SSH client from the pool, and if it fails once
+	// again with a new SSH client and store it back in the Pool.
+
 	// connect to the remote address via the Dialer
 	remote, err := t.Dialer.Dial(t.Remote.Network(), t.Remote.String())
 	if err != nil {
