@@ -35,7 +35,7 @@ func ParseSSHUserAddr(s string) (user string, addr *HostPortAddr, err error) {
 	}
 
 	// SSH server address, default port to 22
-	addr, err := ParseAddr(s, 22)
+	addr, err = ParseAddr(s, 22)
 	if err != nil {
 		return "", nil, err
 	}

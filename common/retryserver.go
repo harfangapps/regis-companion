@@ -44,6 +44,8 @@ type RetryServer struct {
 	wg sync.WaitGroup
 }
 
+// Serve starts accepting connections using RetryServer.Listener. It is a
+// blocking call that always returns an error.
 func (s *RetryServer) Serve(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	done := ctx.Done()
