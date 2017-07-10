@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"bitbucket.org/harfangapps/regis-companion/internal/testutils"
 	"golang.org/x/crypto/ssh"
 )
@@ -68,10 +70,14 @@ func TestStartWithCancelledContext(t *testing.T) {
 	}
 }
 
-/*
 // Stopping a started Tunnel returns the error returned from Listener.Accept.
 func TestStopUnblocksAccept(t *testing.T) {
-	tun := &Tunnel{Local: tcpAddr, Server: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}}
+	sshClient := &testutils.MockSSHClient{}
+	defer setAndDeferSSHDial(mockSSHDial(sshClient))()
+
+	timeout := 10 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 
 	wantErr := errors.New("err")
 	closeChan := make(chan struct{})
@@ -83,10 +89,16 @@ func TestStopUnblocksAccept(t *testing.T) {
 		CloseChan: closeChan,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
+	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}}
+	start := time.Now()
 	if err := tun.Serve(ctx, listener); errors.Cause(err) != wantErr {
 		t.Errorf("want %v, got %v", wantErr, err)
+	}
+
+	duration := time.Since(start)
+	want := timeout
+	if duration < want || duration > (want+(10*time.Millisecond)) {
+		t.Errorf("want duration of %v, got %v", want, duration)
 	}
 
 	// listener's Close should've been called twice (on context signal
@@ -100,6 +112,7 @@ func TestStopUnblocksAccept(t *testing.T) {
 	}
 }
 
+/*
 // Stopping the Tunnel unblocks the active local and remote connections.
 func TestStopUnblockConnection(t *testing.T) {
 	// the close channel for the connections, shared because only the
