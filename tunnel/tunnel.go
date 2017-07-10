@@ -128,6 +128,7 @@ func (t *Tunnel) Serve(ctx context.Context, l net.Listener) error {
 		return err
 	}
 	t.client = client
+	defer client.Close()
 
 	return t.server.Serve(ctx)
 }

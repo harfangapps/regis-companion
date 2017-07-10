@@ -261,7 +261,10 @@ func (s *Server) readWriteLoop(cancel func(), d common.Doner, conn net.Conn) {
 func (s *Server) execute(req []string) (interface{}, error) {
 	if s.Stats != nil {
 		s.Stats.Add("commands_executed", 1)
+		s.Stats.Add("commands_inprogress", 1)
 	}
+
+	defer s.Stats.Add("commands_inprogress", -1)
 
 	if len(req) == 0 {
 		return nil, errEmptyCmd

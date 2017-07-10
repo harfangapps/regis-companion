@@ -1,31 +1,74 @@
-package server
+package tunnel
 
-/*
+import (
+	"context"
+	"io"
+	"net"
+	"testing"
+	"time"
+
+	"bitbucket.org/harfangapps/regis-companion/internal/testutils"
+	"golang.org/x/crypto/ssh"
+)
+
 // arbitrary valid address
 var tcpAddr = &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8000}
 
-// Stopping an unstarted Tunnel returns an error almost immediately.
-func TestStopUnstarted(t *testing.T) {
+func errSSHDial(n, a string, conf *ssh.ClientConfig) (dialCloser, error) {
+	return nil, io.EOF
+}
+
+func mockSSHDial(dc dialCloser) func(n, a string, conf *ssh.ClientConfig) (dialCloser, error) {
+	return func(n, a string, conf *ssh.ClientConfig) (dialCloser, error) {
+		return dc, nil
+	}
+}
+
+func setAndDeferSSHDial(fn func(n, a string, conf *ssh.ClientConfig) (dialCloser, error)) func() {
+	sshDialFunc = fn
+	return func() {
+		sshDialFunc = defaultSSHDial
+	}
+}
+
+// Starting with a cancelled context returns almost immediately.
+func TestStartWithCancelledContext(t *testing.T) {
+	sshClient := &testutils.MockSSHClient{}
+	defer setAndDeferSSHDial(mockSSHDial(sshClient))()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	tun := &Tunnel{Local: tcpAddr}
-	if err := tun.ListenAndServe(ctx); err == nil {
+	closeListener := make(chan struct{})
+	listener := &testutils.MockListener{
+		AcceptFunc: func(i int) (net.Conn, error) {
+			<-closeListener
+			return nil, io.EOF
+		},
+		CloseChan: closeListener,
+	}
+
+	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr}
+	start := time.Now()
+	if err := tun.Serve(ctx, listener); err == nil {
 		t.Errorf("want error, got nil")
 	} else {
 		t.Logf("got error %v", err)
 	}
 
-	// stopping closes the tunnel
-	if ok := tun.Closed(); !ok {
-		t.Errorf("want true, got %v", ok)
+	duration := time.Since(start)
+	want := time.Duration(0)
+	if duration < want || duration > (want+(10*time.Millisecond)) {
+		t.Errorf("want duration of %v, got %v", want, duration)
 	}
-	// and Touch returns false on a closed tunnel
+
+	// Touch returns false on a closed tunnel
 	if ok := tun.Touch(); ok {
 		t.Errorf("want false, got %v", ok)
 	}
 }
 
+/*
 // Stopping a started Tunnel returns the error returned from Listener.Accept.
 func TestStopUnblocksAccept(t *testing.T) {
 	tun := &Tunnel{Local: tcpAddr, Server: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}}
