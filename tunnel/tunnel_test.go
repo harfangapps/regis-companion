@@ -466,17 +466,104 @@ func TestRecordForwarding(t *testing.T) {
 }
 
 func TestServeAlreadyServing(t *testing.T) {
-	t.Skip()
+	sshClient := &testutils.MockSSHClient{}
+	defer setAndDeferSSHDial(mockSSHDial(sshClient))()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	closeListener := make(chan struct{})
+	listener := &testutils.MockListener{
+		AcceptFunc: func(i int) (net.Conn, error) {
+			<-closeListener
+			return nil, io.EOF
+		},
+		CloseChan: closeListener,
+	}
+
+	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr}
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		if err := tun.Serve(ctx, listener); errors.Cause(err) != io.EOF {
+			t.Errorf("want %v, got %v", io.EOF, err)
+		}
+		wg.Done()
+	}()
+
+	<-time.After(10 * time.Millisecond)
+	if err := tun.Serve(ctx, listener); err == nil {
+		t.Errorf("want error, got nil")
+	} else if !strings.Contains(err.Error(), "already started") {
+		t.Errorf("want error to contain `already started`, got %v", err)
+	}
+	wg.Wait()
 }
 
 func TestServeClosed(t *testing.T) {
-	t.Skip()
+	sshClient := &testutils.MockSSHClient{}
+	defer setAndDeferSSHDial(mockSSHDial(sshClient))()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	closeListener := make(chan struct{})
+	listener := &testutils.MockListener{
+		AcceptFunc: func(i int) (net.Conn, error) {
+			<-closeListener
+			return nil, io.EOF
+		},
+		CloseChan: closeListener,
+	}
+
+	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr}
+	if err := tun.Serve(ctx, listener); errors.Cause(err) != io.EOF {
+		t.Errorf("want %v, got %v", io.EOF, err)
+	}
+
+	if err := tun.Serve(ctx, listener); err == nil {
+		t.Errorf("want error, got nil")
+	} else if !strings.Contains(err.Error(), "tunnel closed") {
+		t.Errorf("want error to contain `tunnel closed`, got %v", err)
+	}
 }
 
 func TestTouchNil(t *testing.T) {
-	t.Skip()
+	var tun *Tunnel
+	if ok := tun.Touch(); ok {
+		t.Errorf("want false, got true")
+	}
 }
 
 func TestTouchStarted(t *testing.T) {
-	t.Skip()
+	sshClient := &testutils.MockSSHClient{}
+	defer setAndDeferSSHDial(mockSSHDial(sshClient))()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	closeListener := make(chan struct{})
+	listener := &testutils.MockListener{
+		AcceptFunc: func(i int) (net.Conn, error) {
+			<-closeListener
+			return nil, io.EOF
+		},
+		CloseChan: closeListener,
+	}
+
+	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr}
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		if err := tun.Serve(ctx, listener); errors.Cause(err) != io.EOF {
+			t.Errorf("want %v, got %v", io.EOF, err)
+		}
+		wg.Done()
+	}()
+
+	<-time.After(10 * time.Millisecond)
+	if ok := tun.Touch(); !ok {
+		t.Errorf("want true, got false")
+	}
+	wg.Wait()
 }
