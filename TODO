@@ -36,14 +36,14 @@
     • E.g. in a Cluster, currently connected on another host, could
       come back any time.
 
-* RetryServer
+√ RetryServer
   - Implements the common core of a TCP server
   - Retries temporary errors
   - Dispatches accepted connections to a func
   - Keeps track of active connections, exits only when all are terminated
   - Context-based
 
-* IdleTracker
+√ IdleTracker
   - Has a current and previous atomic counters and a timeout duration
   - Created with a cancel() function that cancels a context
   - Can wrap a net.Conn with an implementation that tracks read/write activity
@@ -51,7 +51,7 @@
   - Launches a goroutine that checks the activity at IdleTimeout frequency
   - Goroutine must be launched in the WaitGroup of the parent, and receive the parent's context
 
-* addr Package
+√ addr Package
   - Normalizes addresses (lowercase host)
   - Listen() on port 0 and return port number
   - net.Addr implementation that is not IP-based
