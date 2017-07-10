@@ -97,6 +97,8 @@ func (s *RetryServer) Serve(ctx context.Context) error {
 
 		// keep track of that goroutine
 		s.wg.Add(1)
+		// signal activity
+		s.IdleTracker.Touch()
 		go s.Dispatch(ctx, &s.wg, s.IdleTracker.TrackConn(conn))
 	}
 }

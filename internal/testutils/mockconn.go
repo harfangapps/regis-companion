@@ -60,6 +60,10 @@ func (c *MockConn) Read(b []byte) (int, error) {
 	i := c.readIndex
 	c.readIndex++
 	c.mu.Unlock()
+
+	if c.ReadFunc == nil {
+		return 0, nil
+	}
 	return c.ReadFunc(i, b)
 }
 
@@ -69,6 +73,10 @@ func (c *MockConn) Write(b []byte) (int, error) {
 	i := c.writeIndex
 	c.writeIndex++
 	c.mu.Unlock()
+
+	if c.WriteFunc == nil {
+		return 0, nil
+	}
 	return c.WriteFunc(i, b)
 }
 

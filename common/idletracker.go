@@ -54,7 +54,9 @@ func (t *IdleTracker) track(ctx context.Context, cancel func(), d Doner) {
 
 // Touch notifies the tracker of activity.
 func (t *IdleTracker) Touch() {
-	atomic.AddUint64(&t.currentCounter, 1)
+	if t.IdleTimeout > 0 {
+		atomic.AddUint64(&t.currentCounter, 1)
+	}
 }
 
 var _ net.Conn = activityConn{}
@@ -77,8 +79,8 @@ func (c activityConn) Write(b []byte) (int, error) {
 // TrackConn wraps the provided connection and returns a connection
 // that notifies the tracker of activity on Read and Write.
 func (t *IdleTracker) TrackConn(c net.Conn) net.Conn {
-	if t.IdleTimeout <= 0 {
-		return c
+	if t.IdleTimeout > 0 {
+		return activityConn{c, &t.currentCounter}
 	}
-	return activityConn{c, &t.currentCounter}
+	return c
 }
