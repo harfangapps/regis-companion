@@ -27,7 +27,7 @@
     • No need for an idle timeout as tunnels have one anyway
   - When a new SSHClient is created, it is for a tunnel, so it is active
 
-* Tunnel
+√ Tunnel
   - Has an SSHClient, a Remote address, and creates a Local address
     • Or optionnally has an explicit local address set
   - Is a server, retries on temporary errors

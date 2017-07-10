@@ -119,7 +119,7 @@ func (s *RetryServer) handleTemporary(delay *time.Duration, err error) bool {
 			*delay = max
 		}
 
-		handleError(errors.Wrap(err, fmt.Sprintf("temporary error, retrying in %v", *delay)), s.ErrChan)
+		HandleError(errors.Wrap(err, fmt.Sprintf("temporary error, retrying in %v", *delay)), s.ErrChan)
 		time.Sleep(*delay)
 		return true
 	}
@@ -127,8 +127,9 @@ func (s *RetryServer) handleTemporary(delay *time.Duration, err error) bool {
 	return false
 }
 
-// handle the error by sending it to the errChan or logging it.
-func handleError(err error, errChan chan<- error) {
+// HandleError handles the error by sending it to the errChan or
+// logging it to standard error if errChan is nil.
+func HandleError(err error, errChan chan<- error) {
 	select {
 	case errChan <- err:
 	default:
