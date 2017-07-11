@@ -1,108 +1,117 @@
 package server
 
-/*
-// Stopping a started Server returns the error returned from Listener.Accept.
-func TestStopUnblocksServerAccept(t *testing.T) {
-	srv := &Server{Addr: tcpAddr}
+import (
+	"context"
+	"io"
+	"net"
+	"strings"
+	"testing"
+	"time"
 
-	wantErr := errors.New("err")
+	"github.com/pkg/errors"
+
+	"bitbucket.org/harfangapps/regis-companion/internal/testutils"
+)
+
+var tcpAddr = &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8000}
+
+func TestStartCancelledAndRestart(t *testing.T) {
 	closeChan := make(chan struct{})
 	listener := &testutils.MockListener{
 		AcceptFunc: func(i int) (net.Conn, error) {
 			<-closeChan
-			return nil, wantErr
+			return nil, io.EOF
 		},
 		CloseChan: closeChan,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
-	if err := srv.serve(ctx, listener); errors.Cause(err) != wantErr {
-		t.Errorf("want %v, got %v", wantErr, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	srv := &Server{Addr: tcpAddr}
+	start := time.Now()
+	if err := srv.serve(ctx, listener); errors.Cause(err) != io.EOF {
+		t.Errorf("want %v, got %v", io.EOF, err)
 	}
 
-	// listener's Close should've been called twice (on context signal
-	// and on exit from Tunnel.serve)
-	if n := listener.CloseCalls(); n != 2 {
-		t.Errorf("want listener.Close() to be called twice, got %v", n)
+	dur := time.Since(start)
+	want := time.Duration(0)
+	if dur < want || dur > (want+(10*time.Millisecond)) {
+		t.Errorf("want duration of %v, got %v", want, dur)
 	}
-	// listener's Accept should've been called once
-	if n := listener.AcceptCalls(); n != 1 {
-		t.Errorf("want listener.Close() to be called once, got %v", n)
+
+	// Close called twice: in goroutine that waits for context.Done,
+	// and in defer of Serve.
+	if n := listener.CloseCalls(); n != 2 {
+		t.Errorf("want Listener.Close to be called twice, got %d", n)
+	}
+
+	// start again
+	if err := srv.serve(ctx, listener); errors.Cause(err) == nil {
+		t.Errorf("want error, got nil")
+	} else if !strings.Contains(err.Error(), "server closed") {
+		t.Errorf("want error to contain `server closed`, got %v", err)
 	}
 }
 
-// Stopping the Server unblocks the active connections.
-func TestStopServerUnblockConnection(t *testing.T) {
-	// the close channel for the connection
-	closeChan := make(chan struct{})
-	readWriteErr := errors.New("read-write")
+func TestExecutePingCommand(t *testing.T) {
+	// create the connection that sends PING and receives PONG
+	buf := testutils.SyncBuffer{}
+	closeConn := make(chan struct{})
 	conn := &testutils.MockConn{
 		ReadFunc: func(i int, b []byte) (int, error) {
-			<-closeChan // block until close
-			return 0, readWriteErr
+			if i == 0 {
+				r := strings.NewReader("*1\r\n$4\r\nPING\r\n")
+				return r.Read(b)
+			}
+			<-closeConn
+			return 0, io.EOF
 		},
 		WriteFunc: func(i int, b []byte) (int, error) {
-			<-closeChan // block until close
-			return 0, readWriteErr
+			if i == 0 {
+				return buf.Write(b)
+			}
+			<-closeConn
+			return 0, io.EOF
 		},
-		CloseChan: closeChan,
+		CloseChan: closeConn,
 	}
 
-	// the Server to test
-	errChan := make(chan error, 1)
-	srv := &Server{Addr: tcpAddr, ErrChan: errChan}
-
-	listenerCloseChan := make(chan struct{})
+	// create the listener that returns the conn on first Accept,
+	// then waits for close.
+	closeChan := make(chan struct{})
 	listener := &testutils.MockListener{
 		AcceptFunc: func(i int) (net.Conn, error) {
-			// return one connection, then block until close
 			if i == 0 {
 				return conn, nil
 			}
-			<-listenerCloseChan
+			<-closeChan
 			return nil, io.EOF
 		},
-		CloseChan: listenerCloseChan,
+		CloseChan: closeChan,
 	}
 
-	// start the Server in a goroutine and stop it after a while
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	timeout := 100 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	wg := sync.WaitGroup{}
-	wg.Add(2)
-	go func() {
-		if err := srv.serve(ctx, listener); errors.Cause(err) != io.EOF {
-			t.Errorf("want io.EOF, got %v", err)
-		}
-		close(errChan)
-		wg.Done()
-	}()
-	// start the goroutine to process errors
-	go func() {
-		var n int
-		for err := range errChan {
-			if errors.Cause(err) != readWriteErr {
-				t.Errorf("want %v, got %v", readWriteErr, err)
-			}
-			n++
-		}
-		if n != 1 {
-			t.Errorf("want 1 error, got %v", n)
-		}
-		wg.Done()
-	}()
+	// create and run the server
+	start := time.Now()
+	srv := &Server{Addr: tcpAddr}
+	if err := srv.serve(ctx, listener); errors.Cause(err) != io.EOF {
+		t.Errorf("want %v, got %v", io.EOF, err)
+	}
 
-	wg.Wait()
+	dur := time.Since(start)
+	want := timeout
+	if dur < want || dur > (want+(10*time.Millisecond)) {
+		t.Errorf("want duration of %v, got %v", want, dur)
+	}
 
-	// Connection should have been Closed once
-	if n := conn.CloseCalls(); n != 1 {
-		t.Errorf("want Conn.Close to be called once, got %v", n)
+	pong := "+PONG\r\n"
+	if s := buf.String(); s != pong {
+		t.Errorf("want response %q, got %v", pong, s)
+	} else {
+		t.Logf("got response %q", s)
 	}
 }
-
-func TestExecuteRequests(t *testing.T) {
-	t.Skip()
-}
-*/
