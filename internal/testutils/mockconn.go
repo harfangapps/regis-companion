@@ -28,6 +28,7 @@ type MockConn struct {
 	readIndex  int
 	writeIndex int
 	closeIndex int
+	closedAt   time.Time
 }
 
 // CloseCalls returns the number of times Close was called.
@@ -36,6 +37,13 @@ func (c *MockConn) CloseCalls() int {
 	i := c.closeIndex
 	c.mu.Unlock()
 	return i
+}
+
+func (c *MockConn) ClosedAt() time.Time {
+	c.mu.Lock()
+	t := c.closedAt
+	c.mu.Unlock()
+	return t
 }
 
 // ReadCalls returns the number of times Read was called.
@@ -89,6 +97,7 @@ func (c *MockConn) Close() error {
 			// already closed
 		default:
 			close(c.CloseChan)
+			c.closedAt = time.Now()
 		}
 	}
 	c.closeIndex++
