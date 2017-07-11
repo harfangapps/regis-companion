@@ -171,7 +171,7 @@ func (s *Server) getTunnelAddr(user string, server, remote addr.HostPortAddr) (n
 }
 
 func (s *Server) serveTunnel(ctx context.Context, tun *tunnel.Tunnel, l net.Listener) {
-	defer tun.KillFunc()
+	defer tun.KillFunc() // must be called to release context resources
 
 	if err := tun.Serve(ctx, l); err != nil {
 		err = errors.Wrap(err, "tunnel serve error")
@@ -190,7 +190,7 @@ func (s *Server) killTunnel(user string, server, remote addr.HostPortAddr) error
 	if tun == nil {
 		return nil
 	}
-	tun.KillFunc()
+	tun.KillAndWait()
 	return nil
 }
 
@@ -217,6 +217,11 @@ func (s *Server) serve(ctx context.Context, l net.Listener) error {
 
 	defer func() {
 		s.mu.Lock()
+		// properly terminate all tunnels
+		for _, tun := range s.tunnels {
+			tun.KillAndWait()
+		}
+		s.tunnels = nil
 		s.state = closed
 		s.mu.Unlock()
 	}()
