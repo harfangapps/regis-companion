@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"expvar"
 	"flag"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"syscall"
 	"time"
 
 	"bitbucket.org/harfangapps/regis-companion/server"
@@ -38,13 +40,13 @@ func main() {
 		log.Fatalf("invalid address: %v", *addrFlag)
 	}
 
-	// handle SIGINT
+	// handle SIGINT and SIGTERM
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, os.Interrupt)
+	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-ch
-		fmt.Println("received interrupt signal, stopping...")
+		fmt.Println("received stop signal, stopping...")
 		cancel()
 	}()
 
@@ -59,8 +61,9 @@ func main() {
 		MetaConfig:        meta,
 		TunnelIdleTimeout: *tunnelIdleTimeoutFlag,
 		WriteTimeout:      *writeTimeoutFlag,
+		Stats:             expvar.NewMap("server"),
 	}
 	if err := srv.ListenAndServe(ctx); err != nil {
-		log.Fatalf("exit with error %v", err)
+		log.Fatalf("exit with error: %v", err)
 	}
 }

@@ -264,7 +264,11 @@ func (s *Server) execute(req []string) (interface{}, error) {
 		s.Stats.Add("commands_inprogress", 1)
 	}
 
-	defer s.Stats.Add("commands_inprogress", -1)
+	defer func() {
+		if s.Stats != nil {
+			s.Stats.Add("commands_inprogress", -1)
+		}
+	}()
 
 	if len(req) == 0 {
 		return nil, errEmptyCmd
