@@ -39,6 +39,7 @@ func (c *MockConn) CloseCalls() int {
 	return i
 }
 
+// ClosedAt returns the timestamp at which the connection was closed.
 func (c *MockConn) ClosedAt() time.Time {
 	c.mu.Lock()
 	t := c.closedAt
