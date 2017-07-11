@@ -567,3 +567,101 @@ func TestTouchStarted(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// Killing the Tunnel waits for proper termination and returns.
+func TestKillUnblockConnection(t *testing.T) {
+	readWriteErr := errors.New("read-write")
+	newBlockingConn := func() net.Conn {
+		close := make(chan struct{})
+		return &testutils.MockConn{
+			ReadFunc: func(i int, b []byte) (int, error) {
+				<-close // block until close
+				return 0, readWriteErr
+			},
+			WriteFunc: func(i int, b []byte) (int, error) {
+				<-close // block until close
+				return 0, readWriteErr
+			},
+			CloseChan: close,
+		}
+	}
+
+	// return a mocked SSH client when dialing via SSH
+	sshClient := &testutils.MockSSHClient{
+		DialFunc: func(i int, n, addr string) (net.Conn, error) {
+			return newBlockingConn(), nil
+		},
+	}
+	defer setAndDeferSSHDial(mockSSHDial(sshClient))()
+
+	listenerCloseChan := make(chan struct{})
+	listener := &testutils.MockListener{
+		AcceptFunc: func(i int) (net.Conn, error) {
+			// return one connection, then block until close
+			if i == 0 {
+				return newBlockingConn(), nil
+			}
+			<-listenerCloseChan
+			return nil, io.EOF
+		},
+		CloseChan: listenerCloseChan,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	// the tunnel to test
+	errChan := make(chan error, 1)
+	tun := &Tunnel{KillFunc: cancel, Local: tcpAddr, SSH: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
+
+	// start the tunnel in a goroutine and kill it after a while
+	start := time.Now()
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		if err := tun.Serve(ctx, listener); errors.Cause(err) != io.EOF {
+			t.Errorf("want io.EOF, got %v", err)
+		}
+		close(errChan)
+		wg.Done()
+	}()
+	// start the goroutine to process errors
+	go func() {
+		var n int
+		for err := range errChan {
+			if errors.Cause(err) != readWriteErr {
+				t.Errorf("want %v, got %v", readWriteErr, err)
+			}
+			n++
+		}
+		if n != 2 {
+			t.Errorf("want 2 errors, got %v", n)
+		}
+		wg.Done()
+	}()
+
+	timeout := 10 * time.Millisecond
+	<-time.After(timeout)
+
+	tun.KillAndWait()
+	dur1 := time.Since(start)
+
+	wg.Wait()
+	dur2 := time.Since(start)
+
+	want := timeout
+	if dur1 < want || dur1 > (want+(10*time.Millisecond)) {
+		t.Errorf("want duration 1 of %v, got %v", want, dur1)
+	}
+	if dur2 < want || dur2 > (want+(10*time.Millisecond)) {
+		t.Errorf("want duration 2 of %v, got %v", want, dur2)
+	}
+
+	// assert the calls to the SSH client
+	if n := sshClient.CloseCalls(); n != 1 {
+		t.Errorf("want sshClient.Close to be called once, got %v", n)
+	}
+	if n := sshClient.DialCalls(); n != 1 {
+		t.Errorf("want sshClient.Dial to be called once, got %v", n)
+	}
+}

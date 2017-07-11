@@ -65,6 +65,13 @@ type tunnelKey struct {
 	Remote addr.HostPortAddr
 }
 
+// various states of the Server
+const (
+	none = iota
+	started
+	closed
+)
+
 // Server defines the regis-companion Server that listens for incoming connections
 // and manages SSH tunnels.
 type Server struct {
@@ -91,8 +98,9 @@ type Server struct {
 
 	server common.RetryServer
 
-	// mu protects the map of addresses-to-tunnel and the ctx
+	// mu protects the following private fields
 	mu      sync.Mutex
+	state   int
 	tunnels map[tunnelKey]*tunnel.Tunnel
 	ctx     context.Context // stored to pass along to Tunnels
 }
@@ -188,12 +196,30 @@ func (s *Server) killTunnel(user string, server, remote addr.HostPortAddr) error
 
 func (s *Server) serve(ctx context.Context, l net.Listener) error {
 	s.mu.Lock()
+	switch s.state {
+	case none:
+		// all good, keep going
+	case started:
+		s.mu.Unlock()
+		return errors.New("server already started")
+	case closed:
+		s.mu.Unlock()
+		return errors.New("server closed")
+	}
+
 	s.tunnels = make(map[tunnelKey]*tunnel.Tunnel)
 	s.ctx = ctx
 	s.server.Dispatch = s.serveConn
 	s.server.ErrChan = s.ErrChan
 	s.server.Listener = l
+	s.state = started
 	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		s.state = closed
+		s.mu.Unlock()
+	}()
 
 	return s.server.Serve(ctx)
 }

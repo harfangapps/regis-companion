@@ -42,19 +42,24 @@ type Tunnel struct {
 	SSH net.Addr
 	// Config is the configuration to use to dial to the SSH server.
 	Config *ssh.ClientConfig
+
 	// The local address on which the tunnel is exposed.
 	Local net.Addr
 	// The remote address to connect to via the SSH connection.
 	Remote net.Addr
+
 	// The duration after which the tunnel is closed if there is no
 	// activity.
 	IdleTimeout time.Duration
+
 	// The expvar tunnel statistics.
 	Stats *expvar.Map
+
 	// The channel to send errors to. If nil, the errors are logged.
 	// If the send would block, the error is dropped. It is the responsibility
 	// of the caller to close the channel once the Tunnel is stopped.
 	ErrChan chan<- error
+
 	// The function to cancel the context of the Tunnel.
 	KillFunc func()
 
@@ -62,8 +67,19 @@ type Tunnel struct {
 	client dialCloser
 
 	// protects the following private fields
-	mu    sync.Mutex
-	state int
+	mu     sync.Mutex
+	killed chan struct{} // closed when tunnel is closed
+	state  int
+}
+
+// KillAndWait stops the tunnel by cancelling its context using KillFunc
+// and waits for a clean termination to complete before returning.
+func (t *Tunnel) KillAndWait() {
+	if t == nil || t.KillFunc == nil {
+		return
+	}
+	t.KillFunc()
+	<-t.killed
 }
 
 // Touch generates activity on the tunnel to prevent it from closing
@@ -105,6 +121,7 @@ func (t *Tunnel) Serve(ctx context.Context, l net.Listener) error {
 	t.server.IdleTracker.IdleTimeout = t.IdleTimeout
 	t.server.Dispatch = t.forward
 	t.state = started
+	t.killed = make(chan struct{})
 	t.mu.Unlock()
 
 	if t.Stats != nil {
@@ -113,13 +130,14 @@ func (t *Tunnel) Serve(ctx context.Context, l net.Listener) error {
 	}
 
 	defer func() {
-		t.mu.Lock()
-		t.state = closed
-		t.mu.Unlock()
-
 		if t.Stats != nil {
 			t.Stats.Add("active_tunnels", -1)
 		}
+
+		t.mu.Lock()
+		t.state = closed
+		close(t.killed)
+		t.mu.Unlock()
 	}()
 
 	// connect to the SSH server and store the dialCloser
