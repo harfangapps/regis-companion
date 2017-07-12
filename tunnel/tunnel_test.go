@@ -53,6 +53,9 @@ func TestStartWithCancelledContext(t *testing.T) {
 	}
 
 	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr}
+	if err := tun.PrepareForServe(); err != nil {
+		t.Errorf("want nil, got %v", err)
+	}
 	start := time.Now()
 	if err := tun.Serve(ctx, listener); err == nil {
 		t.Errorf("want error, got nil")
@@ -92,6 +95,9 @@ func TestStopUnblocksAccept(t *testing.T) {
 	}
 
 	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}}
+	if err := tun.PrepareForServe(); err != nil {
+		t.Errorf("want nil, got %v", err)
+	}
 	start := time.Now()
 	if err := tun.Serve(ctx, listener); errors.Cause(err) != wantErr {
 		t.Errorf("want %v, got %v", wantErr, err)
@@ -156,6 +162,9 @@ func TestCancelUnblockConnection(t *testing.T) {
 	// the tunnel to test
 	errChan := make(chan error, 1)
 	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
+	if err := tun.PrepareForServe(); err != nil {
+		t.Errorf("want nil, got %v", err)
+	}
 
 	// start the tunnel in a goroutine and stop it after a while
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -236,6 +245,9 @@ func TestAcceptErrorUnblockConnection(t *testing.T) {
 	// the tunnel to test
 	errChan := make(chan error, 1)
 	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
+	if err := tun.PrepareForServe(); err != nil {
+		t.Errorf("want nil, got %v", err)
+	}
 
 	// start the tunnel in a goroutine and stop it after a while, should return earlier than that
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -297,6 +309,9 @@ func TestSSHDialError(t *testing.T) {
 	// the tunnel to test
 	errChan := make(chan error, 1)
 	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
+	if err := tun.PrepareForServe(); err != nil {
+		t.Errorf("want nil, got %v", err)
+	}
 
 	// start the tunnel in a goroutine and close it after a while
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -349,6 +364,9 @@ func TestServerDialError(t *testing.T) {
 	// the tunnel to test
 	errChan := make(chan error, 1)
 	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
+	if err := tun.PrepareForServe(); err != nil {
+		t.Errorf("want nil, got %v", err)
+	}
 
 	// start the tunnel in a goroutine and close it after a while
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -434,6 +452,9 @@ func TestRecordForwarding(t *testing.T) {
 	// the tunnel to test
 	errChan := make(chan error, 1)
 	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
+	if err := tun.PrepareForServe(); err != nil {
+		t.Errorf("want nil, got %v", err)
+	}
 
 	// start the tunnel in a goroutine and close it after a while
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -482,6 +503,10 @@ func TestServeAlreadyServing(t *testing.T) {
 	}
 
 	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr}
+	if err := tun.PrepareForServe(); err != nil {
+		t.Errorf("want nil, got %v", err)
+	}
+
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
@@ -517,6 +542,9 @@ func TestServeClosed(t *testing.T) {
 	}
 
 	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr}
+	if err := tun.PrepareForServe(); err != nil {
+		t.Errorf("want nil, got %v", err)
+	}
 	if err := tun.Serve(ctx, listener); errors.Cause(err) != io.EOF {
 		t.Errorf("want %v, got %v", io.EOF, err)
 	}
@@ -552,6 +580,10 @@ func TestTouchStarted(t *testing.T) {
 	}
 
 	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr}
+	if err := tun.PrepareForServe(); err != nil {
+		t.Errorf("want nil, got %v", err)
+	}
+
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
@@ -613,6 +645,9 @@ func TestKillUnblockConnection(t *testing.T) {
 	// the tunnel to test
 	errChan := make(chan error, 1)
 	tun := &Tunnel{KillFunc: cancel, Local: tcpAddr, SSH: tcpAddr, Remote: tcpAddr, Config: &ssh.ClientConfig{}, ErrChan: errChan}
+	if err := tun.PrepareForServe(); err != nil {
+		t.Errorf("want nil, got %v", err)
+	}
 
 	// start the tunnel in a goroutine and kill it after a while
 	start := time.Now()

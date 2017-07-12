@@ -34,6 +34,7 @@ type DialCloser interface {
 // various states of the Tunnel
 const (
 	none = iota
+	prepared
 	started
 	closed
 )
@@ -111,12 +112,40 @@ func (t *Tunnel) Touch() bool {
 	return true
 }
 
+// PrepareForServe prepares the Tunnel for serving connections. It must
+// be called before Serve, which typically runs in a separate goroutine.
+func (t *Tunnel) PrepareForServe() error {
+	t.mu.Lock()
+	switch t.state {
+	case none:
+		// all good, keep going
+	case prepared, started:
+		t.mu.Unlock()
+		return errors.New("tunnel already started")
+	case closed:
+		t.mu.Unlock()
+		return errors.New("tunnel closed")
+	}
+
+	t.server.ErrChan = t.ErrChan
+	t.server.IdleTracker.IdleTimeout = t.IdleTimeout
+	t.server.Dispatch = t.forward
+	t.state = prepared
+	t.killed = make(chan struct{})
+	t.mu.Unlock()
+
+	return nil
+}
+
 // Serve starts the tunnel's server on the local address. It is a blocking
 // call that always returns an error.
 func (t *Tunnel) Serve(ctx context.Context, l net.Listener) error {
 	t.mu.Lock()
 	switch t.state {
 	case none:
+		t.mu.Unlock()
+		return errors.New("tunnel not prepared")
+	case prepared:
 		// all good, keep going
 	case started:
 		t.mu.Unlock()
@@ -126,12 +155,8 @@ func (t *Tunnel) Serve(ctx context.Context, l net.Listener) error {
 		return errors.New("tunnel closed")
 	}
 
-	t.server.ErrChan = t.ErrChan
 	t.server.Listener = l
-	t.server.IdleTracker.IdleTimeout = t.IdleTimeout
-	t.server.Dispatch = t.forward
 	t.state = started
-	t.killed = make(chan struct{})
 	t.mu.Unlock()
 
 	if t.Stats != nil {
