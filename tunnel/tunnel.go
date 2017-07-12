@@ -3,7 +3,6 @@ package tunnel
 import (
 	"context"
 	"expvar"
-	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -83,11 +82,8 @@ func (t *Tunnel) KillAndWait() {
 	if t == nil || t.KillFunc == nil {
 		return
 	}
-	fmt.Println(">>>>>>> calling killfunc")
 	t.KillFunc()
-	fmt.Println(">>>>>>> waiting for close")
 	<-t.killed
-	fmt.Println(">>>>>>> closed")
 }
 
 // Touch generates activity on the tunnel to prevent it from closing
@@ -100,9 +96,8 @@ func (t *Tunnel) Touch() bool {
 
 	t.mu.Lock()
 	// Touch could be called before the Tunnel.serve goroutine was launched,
-	// in which case it would not be started yet. So just check that it is
-	// not closed.
-	if t.state == closed {
+	// in which case it would not be started yet.
+	if t.state != started && t.state != prepared {
 		t.mu.Unlock()
 		return false
 	}
