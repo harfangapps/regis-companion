@@ -18,17 +18,17 @@ import (
 // arbitrary valid address
 var tcpAddr = &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8000}
 
-func errSSHDial(n, a string, conf *ssh.ClientConfig) (dialCloser, error) {
+func errSSHDial(n, a string, conf *ssh.ClientConfig) (DialCloser, error) {
 	return nil, io.EOF
 }
 
-func mockSSHDial(dc dialCloser) func(n, a string, conf *ssh.ClientConfig) (dialCloser, error) {
-	return func(n, a string, conf *ssh.ClientConfig) (dialCloser, error) {
+func mockSSHDial(dc DialCloser) func(n, a string, conf *ssh.ClientConfig) (DialCloser, error) {
+	return func(n, a string, conf *ssh.ClientConfig) (DialCloser, error) {
 		return dc, nil
 	}
 }
 
-func setAndDeferSSHDial(fn func(n, a string, conf *ssh.ClientConfig) (dialCloser, error)) func() {
+func setAndDeferSSHDial(fn func(n, a string, conf *ssh.ClientConfig) (DialCloser, error)) func() {
 	SSHDialFunc = fn
 	return func() {
 		SSHDialFunc = DefaultSSHDial

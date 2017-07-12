@@ -20,12 +20,12 @@ import (
 var SSHDialFunc = DefaultSSHDial
 
 // DefaultSSHDial is the default implementation to use for SSH Dial.
-func DefaultSSHDial(n, addr string, config *ssh.ClientConfig) (dialCloser, error) {
+func DefaultSSHDial(n, addr string, config *ssh.ClientConfig) (DialCloser, error) {
 	return ssh.Dial(n, addr, config)
 }
 
-// dialCloser defines the required functions implemented by an SSH Client.
-type dialCloser interface {
+// DialCloser defines the required functions implemented by an SSH Client.
+type DialCloser interface {
 	Dial(n, addr string) (net.Conn, error)
 	Close() error
 }
@@ -67,7 +67,7 @@ type Tunnel struct {
 	KillFunc func()
 
 	server common.RetryServer
-	client dialCloser
+	client DialCloser
 
 	// protects the following private fields
 	mu     sync.Mutex
