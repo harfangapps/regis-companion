@@ -10,11 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/ssh"
+
 	"github.com/pkg/errors"
 
 	"bitbucket.org/harfangapps/regis-companion/addr"
 	"bitbucket.org/harfangapps/regis-companion/internal/testutils"
 	"bitbucket.org/harfangapps/regis-companion/resp"
+	"bitbucket.org/harfangapps/regis-companion/tunnel"
 )
 
 var tcpAddr = &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8000}
@@ -31,6 +34,19 @@ func setAndDeferListenFunc(fn func(addr net.Addr) (net.Listener, int, error)) fu
 	addr.ListenFunc = fn
 	return func() {
 		addr.ListenFunc = addr.Listen
+	}
+}
+
+func mockSSHDial(dc tunnel.DialCloser) func(n, a string, conf *ssh.ClientConfig) (tunnel.DialCloser, error) {
+	return func(n, a string, conf *ssh.ClientConfig) (tunnel.DialCloser, error) {
+		return dc, nil
+	}
+}
+
+func setAndDeferSSHDial(fn func(n, a string, conf *ssh.ClientConfig) (tunnel.DialCloser, error)) func() {
+	tunnel.SSHDialFunc = fn
+	return func() {
+		tunnel.SSHDialFunc = tunnel.DefaultSSHDial
 	}
 }
 
