@@ -563,6 +563,30 @@ func TestTouchNil(t *testing.T) {
 	}
 }
 
+func TestServeWithoutPrepare(t *testing.T) {
+	sshClient := &testutils.MockSSHClient{}
+	defer setAndDeferSSHDial(mockSSHDial(sshClient))()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	closeListener := make(chan struct{})
+	listener := &testutils.MockListener{
+		AcceptFunc: func(i int) (net.Conn, error) {
+			<-closeListener
+			return nil, io.EOF
+		},
+		CloseChan: closeListener,
+	}
+
+	tun := &Tunnel{Local: tcpAddr, SSH: tcpAddr}
+	if err := tun.Serve(ctx, listener); err == nil {
+		t.Errorf("want error, got %v", err)
+	} else if !strings.Contains(err.Error(), "not prepared") {
+		t.Errorf("want error to contain `not prepared`, got %v", err)
+	}
+}
+
 func TestTouchStarted(t *testing.T) {
 	sshClient := &testutils.MockSSHClient{}
 	defer setAndDeferSSHDial(mockSSHDial(sshClient))()
