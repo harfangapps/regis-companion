@@ -145,7 +145,7 @@ func (s *Server) getTunnelAddr(user string, server, remote addr.HostPortAddr) (n
 	}
 
 	// get the port for this new tunnel
-	l, port, err := addr.Listen(defaultLocalAddr)
+	l, port, err := addr.ListenFunc(defaultLocalAddr)
 	if err != nil {
 		return nil, err
 	}

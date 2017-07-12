@@ -12,11 +12,27 @@ import (
 
 	"github.com/pkg/errors"
 
+	"bitbucket.org/harfangapps/regis-companion/addr"
 	"bitbucket.org/harfangapps/regis-companion/internal/testutils"
 	"bitbucket.org/harfangapps/regis-companion/resp"
 )
 
 var tcpAddr = &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8000}
+
+func mockListenFunc(mockListener net.Listener) func(net.Addr) (net.Listener, int, error) {
+	port := 40000
+	return func(addr net.Addr) (net.Listener, int, error) {
+		port++
+		return mockListener, port, nil
+	}
+}
+
+func setAndDeferListenFunc(fn func(addr net.Addr) (net.Listener, int, error)) func() {
+	addr.ListenFunc = fn
+	return func() {
+		addr.ListenFunc = addr.Listen
+	}
+}
 
 func TestStartCancelledAndRestart(t *testing.T) {
 	closeChan := make(chan struct{})
@@ -271,4 +287,16 @@ func TestEncodeErrorTerminatesConnection(t *testing.T) {
 	if dur < want || dur > (want+(10*time.Millisecond)) {
 		t.Errorf("want duration of %v, got %v", want, dur)
 	}
+}
+
+func TestGetTunnelAddrTwiceReturnsSameAddr(t *testing.T) {
+	t.Skip()
+}
+
+func TestGetTunnelAddrTwiceAfterIdleTimeoutReturnsNewAddr(t *testing.T) {
+	t.Skip()
+}
+
+func TestGetTunnelAddrKillTunnel(t *testing.T) {
+	t.Skip()
 }

@@ -29,9 +29,9 @@ func mockSSHDial(dc dialCloser) func(n, a string, conf *ssh.ClientConfig) (dialC
 }
 
 func setAndDeferSSHDial(fn func(n, a string, conf *ssh.ClientConfig) (dialCloser, error)) func() {
-	sshDialFunc = fn
+	SSHDialFunc = fn
 	return func() {
-		sshDialFunc = defaultSSHDial
+		SSHDialFunc = DefaultSSHDial
 	}
 }
 

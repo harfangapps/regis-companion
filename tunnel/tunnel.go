@@ -15,9 +15,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-var sshDialFunc = defaultSSHDial
+// SSHDialFunc is a variable that references the SSH dial function to
+// use so that it can be mocked for tests.
+var SSHDialFunc = DefaultSSHDial
 
-func defaultSSHDial(n, addr string, config *ssh.ClientConfig) (dialCloser, error) {
+// DefaultSSHDial is the default implementation to use for SSH Dial.
+func DefaultSSHDial(n, addr string, config *ssh.ClientConfig) (dialCloser, error) {
 	return ssh.Dial(n, addr, config)
 }
 
@@ -141,7 +144,7 @@ func (t *Tunnel) Serve(ctx context.Context, l net.Listener) error {
 	}()
 
 	// connect to the SSH server and store the dialCloser
-	client, err := sshDialFunc(t.SSH.Network(), t.SSH.String(), t.Config)
+	client, err := SSHDialFunc(t.SSH.Network(), t.SSH.String(), t.Config)
 	if err != nil {
 		return err
 	}

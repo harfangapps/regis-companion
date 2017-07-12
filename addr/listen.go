@@ -2,6 +2,11 @@ package addr
 
 import "net"
 
+// ListenFunc is a variable that holds the reference to
+// the Listen function to use, so that it can be mocked
+// for tests.
+var ListenFunc = Listen
+
 // Listen creates a Listener listening on the specified address.
 // It returns the listener, the port it uses (0 if not
 // listening on a TCP address), or an error.
