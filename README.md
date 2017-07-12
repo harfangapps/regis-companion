@@ -25,15 +25,25 @@ $ brew install harfangapps/harfangapps/regis-companion
 
 ### Using Pre-Built Binaries
 
-Download the latest version of `regis-companion`:
+Download the latest version of `regis-companion`, replacing `${FILENAME}` with the desired output file path, and `${VERSION}` with the latest available version (see the [Releases][releases] tab in Github):
 
 ```
-TODO: link
-```
+# download e.g. using curl
+$ curl -o ${FILENAME} https://github.com/harfangapps/regis-companion/releases/download/v${VERSION}/regis-companion_${VERSION}_macOS-64bit.tar.gz
 
-TODO: extract information, or is it directly the binary?
+# then extract the binary
+$ tar -xzf ${FILENAME}
+
+# optionnally, copy it to some location in your $PATH (recommended)
+```
 
 ## Running As A launchd Service (RECOMMENDED)
+
+If you installed using Homebrew, then running `regis-companion` as a `launchd` service is simple:
+
+```
+$ brew services start regis-companion
+```
 
 TODO: brew services or manually
 
@@ -53,5 +63,6 @@ The [BSD 3-Clause license][bsd].
 [regis]: https://www.harfangapps.com/regis/
 [harfang]: https://www.harfangapps.com/
 [brew]: https://brew.sh/
+[releases]: https://github.com/harfangapps/regis-companion/releases
 [bsd]: http://opensource.org/licenses/BSD-3-Clause
 
