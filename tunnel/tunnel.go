@@ -94,13 +94,16 @@ func (t *Tunnel) Touch() bool {
 	}
 
 	t.mu.Lock()
-	if t.state != started {
+	// Touch could be called before the Tunnel.serve goroutine was launched,
+	// in which case it would not be started yet. So just check that it is
+	// not closed.
+	if t.state == closed {
 		t.mu.Unlock()
 		return false
 	}
+	t.server.IdleTracker.Touch()
 	t.mu.Unlock()
 
-	t.server.IdleTracker.Touch()
 	return true
 }
 

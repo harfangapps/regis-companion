@@ -10,45 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/crypto/ssh"
-
 	"github.com/pkg/errors"
 
-	"bitbucket.org/harfangapps/regis-companion/addr"
 	"bitbucket.org/harfangapps/regis-companion/internal/testutils"
 	"bitbucket.org/harfangapps/regis-companion/resp"
-	"bitbucket.org/harfangapps/regis-companion/tunnel"
 )
 
 var tcpAddr = &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8000}
-
-func mockListenFunc(mockListener net.Listener) func(net.Addr) (net.Listener, int, error) {
-	port := 40000
-	return func(addr net.Addr) (net.Listener, int, error) {
-		port++
-		return mockListener, port, nil
-	}
-}
-
-func setAndDeferListenFunc(fn func(addr net.Addr) (net.Listener, int, error)) func() {
-	addr.ListenFunc = fn
-	return func() {
-		addr.ListenFunc = addr.Listen
-	}
-}
-
-func mockSSHDial(dc tunnel.DialCloser) func(n, a string, conf *ssh.ClientConfig) (tunnel.DialCloser, error) {
-	return func(n, a string, conf *ssh.ClientConfig) (tunnel.DialCloser, error) {
-		return dc, nil
-	}
-}
-
-func setAndDeferSSHDial(fn func(n, a string, conf *ssh.ClientConfig) (tunnel.DialCloser, error)) func() {
-	tunnel.SSHDialFunc = fn
-	return func() {
-		tunnel.SSHDialFunc = tunnel.DefaultSSHDial
-	}
-}
 
 func TestStartCancelledAndRestart(t *testing.T) {
 	closeChan := make(chan struct{})
@@ -148,16 +116,18 @@ func TestExecuteUnknownCommand(t *testing.T) {
 	testExecuteCommand(t, []string{"unknown"}, resp.Error("ERR unknown command unknown"))
 }
 
+func bufferForResp(t *testing.T, v interface{}) *bytes.Buffer {
+	var buf bytes.Buffer
+	if err := resp.NewEncoder(&buf).Encode(v); err != nil {
+		t.Fatal(err)
+	}
+	return &buf
+}
+
 func testExecuteCommand(t *testing.T, request []string, response interface{}) {
 	// encode the request and the response
-	var req bytes.Buffer
-	if err := resp.NewEncoder(&req).Encode(request); err != nil {
-		t.Fatal(err)
-	}
-	var res bytes.Buffer
-	if err := resp.NewEncoder(&res).Encode(response); err != nil {
-		t.Fatal(err)
-	}
+	req := bufferForResp(t, request)
+	res := bufferForResp(t, response)
 
 	// create the connection
 	buf := testutils.SyncBuffer{}
@@ -303,16 +273,4 @@ func TestEncodeErrorTerminatesConnection(t *testing.T) {
 	if dur < want || dur > (want+(10*time.Millisecond)) {
 		t.Errorf("want duration of %v, got %v", want, dur)
 	}
-}
-
-func TestGetTunnelAddrTwiceReturnsSameAddr(t *testing.T) {
-	t.Skip()
-}
-
-func TestGetTunnelAddrTwiceAfterIdleTimeoutReturnsNewAddr(t *testing.T) {
-	t.Skip()
-}
-
-func TestGetTunnelAddrKillTunnel(t *testing.T) {
-	t.Skip()
 }
