@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"expvar"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -81,8 +82,11 @@ func (t *Tunnel) KillAndWait() {
 	if t == nil || t.KillFunc == nil {
 		return
 	}
+	fmt.Println(">>>>>>> calling killfunc")
 	t.KillFunc()
+	fmt.Println(">>>>>>> waiting for close")
 	<-t.killed
+	fmt.Println(">>>>>>> closed")
 }
 
 // Touch generates activity on the tunnel to prevent it from closing

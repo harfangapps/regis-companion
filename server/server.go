@@ -190,7 +190,9 @@ func (s *Server) killTunnel(user string, server, remote addr.HostPortAddr) error
 	if tun == nil {
 		return nil
 	}
+	fmt.Println(">>>>>>> killing tunnel")
 	tun.KillAndWait()
+	fmt.Println(">>>>>>> tunnel killed")
 	return nil
 }
 
@@ -219,7 +221,9 @@ func (s *Server) serve(ctx context.Context, l net.Listener) error {
 		s.mu.Lock()
 		// properly terminate all tunnels
 		for _, tun := range s.tunnels {
+			fmt.Println(">>>>>>> killing tunnel")
 			tun.KillAndWait()
+			fmt.Println(">>>>>>> tunnel killed")
 		}
 		s.tunnels = nil
 		s.state = closed
