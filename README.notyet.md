@@ -27,7 +27,7 @@ $ brew install harfangapps/harfangapps/regis-companion
 
 ### Using Pre-Built Binaries
 
-Download the latest version of `regis-companion`, replacing `${FILENAME}` with the desired output file path, and `${VERSION}` with the latest available version (see the [Releases][releases] tab in Github):
+Download the latest version of `regis-companion`, replacing `${FILENAME}` with the desired output file path, and `${VERSION}` with the latest available version without the leading "v" (e.g. for `v0.1.0`, replace `${VERSION}` with `0.1.0`, see the [Releases][releases] tab in Github for the available versions):
 
 ```
 # download e.g. using curl
@@ -36,7 +36,7 @@ $ curl -o ${FILENAME} https://github.com/harfangapps/regis-companion/releases/do
 # then extract the binary
 $ tar -xzf ${FILENAME}
 
-# optionnally, copy it to some location in your $PATH (recommended)
+# optionally, copy it to some location in your $PATH (recommended)
 ```
 
 ## Running As A launchd Service (RECOMMENDED)
