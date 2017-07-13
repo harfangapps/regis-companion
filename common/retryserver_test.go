@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"bitbucket.org/harfangapps/regis-companion/internal/testutils"
+	"github.com/harfangapps/regis-companion/internal/testutils"
 	"github.com/pkg/errors"
 )
 

@@ -12,8 +12,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"bitbucket.org/harfangapps/regis-companion/internal/testutils"
-	"bitbucket.org/harfangapps/regis-companion/resp"
+	"github.com/harfangapps/regis-companion/internal/testutils"
+	"github.com/harfangapps/regis-companion/resp"
 )
 
 var tcpAddr = &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8000}

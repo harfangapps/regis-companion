@@ -3,7 +3,7 @@ package server
 import (
 	"fmt"
 
-	"bitbucket.org/harfangapps/regis-companion/resp"
+	"github.com/harfangapps/regis-companion/resp"
 )
 
 type commandCmd struct{}

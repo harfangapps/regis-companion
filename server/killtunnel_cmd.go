@@ -3,8 +3,8 @@ package server
 import (
 	"fmt"
 
-	"bitbucket.org/harfangapps/regis-companion/addr"
-	"bitbucket.org/harfangapps/regis-companion/resp"
+	"github.com/harfangapps/regis-companion/addr"
+	"github.com/harfangapps/regis-companion/resp"
 )
 
 type killTunnelCmd struct{}

@@ -11,7 +11,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"bitbucket.org/harfangapps/regis-companion/internal/testutils"
+	"github.com/harfangapps/regis-companion/internal/testutils"
 	"golang.org/x/crypto/ssh"
 )
 

@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"strings"
 
-	"bitbucket.org/harfangapps/regis-companion/resp"
+	"github.com/harfangapps/regis-companion/resp"
 )
 
 type infoCmd struct{}

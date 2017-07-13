@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"time"
 
-	"bitbucket.org/harfangapps/regis-companion/addr"
-	"bitbucket.org/harfangapps/regis-companion/tunnel"
+	"github.com/harfangapps/regis-companion/addr"
+	"github.com/harfangapps/regis-companion/tunnel"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"

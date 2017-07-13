@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"bitbucket.org/harfangapps/regis-companion/server"
-	"bitbucket.org/harfangapps/regis-companion/sshconfig"
+	"github.com/harfangapps/regis-companion/server"
+	"github.com/harfangapps/regis-companion/sshconfig"
 )
 
 var (

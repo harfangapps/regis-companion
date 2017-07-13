@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"bitbucket.org/harfangapps/regis-companion/common"
+	"github.com/harfangapps/regis-companion/common"
 
 	"github.com/pkg/errors"
 )

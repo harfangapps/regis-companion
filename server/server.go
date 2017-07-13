@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"bitbucket.org/harfangapps/regis-companion/addr"
-	"bitbucket.org/harfangapps/regis-companion/common"
-	"bitbucket.org/harfangapps/regis-companion/resp"
-	"bitbucket.org/harfangapps/regis-companion/sshconfig"
-	"bitbucket.org/harfangapps/regis-companion/tunnel"
+	"github.com/harfangapps/regis-companion/addr"
+	"github.com/harfangapps/regis-companion/common"
+	"github.com/harfangapps/regis-companion/resp"
+	"github.com/harfangapps/regis-companion/sshconfig"
+	"github.com/harfangapps/regis-companion/tunnel"
 
 	"github.com/pkg/errors"
 )
