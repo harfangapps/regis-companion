@@ -39,6 +39,8 @@ $ tar -xzf ${FILENAME}
 
 ## Running As A launchd Service (RECOMMENDED)
 
+### Via Homebrew (RECOMMENDED)
+
 If you installed using Homebrew, then running `regis-companion` as a `launchd` service is simple:
 
 ```
@@ -47,15 +49,52 @@ $ brew services start regis-companion
 
 This makes sure `regis-companion` is always running in the background, waiting for connections from Regis. Note that by default, `regis-companion` only accepts connections from the loopback interface (localhost). It is recommended to leave it that way.
 
-TODO: brew services or manually
+### Manually
+
+If you installed manually, either using pre-built binaries or from source, you can generate a skeleton `launchd` plist file by running:
+
+```
+# redirect the output to a file
+$ regis-companion --generate-launchd-plist > com.harfangapps.regis-companion.plist
+```
+
+You should then review and edit as required the generated plist file, and move it to the `launchd` directory so that it can be registered as a service.
+
+```
+$ mv com.harfangapps.regis-companion.plist ~/Library/LaunchAgents/
+```
+
+You can then enable or disable the service using `launchctl`:
+
+```
+$ launchctl enable com.harfangapps.regis-companion
+```
+
+Refer to `launchctl` documentation for details (`$ man launchctl`).
 
 ## Features
+
+TODO: or usage?
 
 This companion command supports automatic SSH tunneling for Regis so that it can connect to remote hosts otherwise not available from the local computer.
 
 TODO: find right phrasing, it makes otherwise impossible things possible, it is way more than just a transparent `ssh -N -L`, like automatically following Redis Cluster redirections when the hosts are on a VPN, supports the SWITCHTO built-in command, Sentinels, etc.
 
 ## Preparing a Release
+
+The following steps are automated via the Makefile, so generally preparing a release requires:
+
+1. Add version tag to the current git commit, push the tag.
+2. Run the following make commands:
+    ```
+    $ make release
+    # read output, some manual steps required
+
+    $ make brew
+    # read output, copy the SHA256 to the homebrew recipe and update the version in the URL
+    ```
+
+For reference, the detailed steps are:
 
 * [ ] Add version tag to the current git commit
     `$ git tag vM.m.p`
@@ -67,8 +106,6 @@ TODO: find right phrasing, it makes otherwise impossible things possible, it is 
     `$ tar -czf ./bin/regis-companion_${VERSION}_macOS-64bit.tar.gz ./bin/regis-companion`
 * [ ] Upload the binary to the Github Release
 * [ ] Update the harfangapps/homebrew-harfangapps tap for the new version
-
-TODO: Makefile to automate this
 
 ## License
 

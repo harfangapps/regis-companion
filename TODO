@@ -1,18 +1,11 @@
 # TODOs
 
-- Write launchd configuration file
-
 ## Guidelines
 
 * Subcommand to register itself as launchd service, confirm executable location (or test if absolute path is necessary)
-  - See also `brew services`, do similar to redis brew recipe.
+  - Or at least generate a skeleton plist file.
 
 * Have a good, simple update flow
-  - Ideally, a custom homebrew recipe, so `brew update && brew upgrade redis-companion` works.
-  - http://docs.brew.sh/brew-tap.html
   - Support manual download of binary too.
   - Regis could check for companion updates and display a message when a new version is available.
-
-* Test logging via launchd, seems to output in /var/log/system.log?
-  - Do the same as the Regis homebrew recipe, writes logs to files
 
