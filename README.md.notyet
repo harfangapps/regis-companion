@@ -63,7 +63,12 @@ TODO: find right phrasing, it makes otherwise impossible things possible, it is 
     `$ ./misc/scripts/build.sh`
 * [ ] Run a test
     `$ ./bin/regis-companion -version`
+* [ ] Create the archive for the binary
+    `$ tar -czf ./bin/regis-companion_${VERSION}_macOS-64bit.tar.gz ./bin/regis-companion`
 * [ ] Upload the binary to the Github Release
+* [ ] Update the harfangapps/homebrew-harfangapps tap for the new version
+
+TODO: Makefile to automate this
 
 ## License
 
