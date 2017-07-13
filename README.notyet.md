@@ -6,6 +6,8 @@ Regis companion is a command-line tool that provides advanced features for the [
 
 The Regis companion can be installed via [Homebrew][brew] or by downloading a pre-built binary from Github. It is recommended to use Homebrew for a simpler update flow.
 
+It is also recommended to register `regis-companion` as a `launchd` service, see [Running As A launchd Service (RECOMMENDED)][#running-as-a-launchd-service-recommended].
+
 ### Using Homebrew (RECOMMENDED)
 
 To install Homebrew, follow the [instructions on their home page][brew]. Then install Harfang Apps' Homebrew tap (a `tap` is a third-party repository of Homebrew formulas):
@@ -67,7 +69,8 @@ $ mv com.harfangapps.regis-companion.plist ~/Library/LaunchAgents/
 You can then enable or disable the service using `launchctl`:
 
 ```
-$ launchctl enable com.harfangapps.regis-companion
+$ launchctl enable gui/${UID}/com.harfangapps.regis-companion
+$ launchctl bootstrap gui/${UID} ~/Library/LaunchAgents/com.harfangapps.regis-companion.plist
 ```
 
 Refer to `launchctl` documentation for details (`$ man launchctl`).
