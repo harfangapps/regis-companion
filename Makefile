@@ -10,7 +10,7 @@ release:
 	@./misc/scripts/build.sh
 	@./bin/regis-companion -version
 	@tar -czf ./bin/regis-companion_${VERSION}_macOS-64bit.tar.gz ./bin/regis-companion
-	@echo "Upload the archive to the v${VERSION} release on github and publish it, then run `make brew` and upate the tap:"
+	@echo "Upload the archive to the v${VERSION} release on github and publish it, then run 'make brew' and upate the tap:"
 	@echo "https://github.com/harfangapps/regis-companion/releases/tag/v${VERSION}"
 
 .PHONY: brew
