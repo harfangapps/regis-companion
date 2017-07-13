@@ -1,6 +1,5 @@
 # TODOs
 
-- Test a DO cluster with no localhost bind restriction with redis-cli, Regis, and regis-companion. Only the latter should work.
 - Write launchd configuration file
 - Write homebrew recipe in a harfangapps/homebrew-harfangapps repository
 
