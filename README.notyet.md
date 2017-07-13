@@ -1,6 +1,6 @@
 # Regis Companion
 
-Regis companion is a command-line tool that provides advanced features for the [Regis Mac App](regis) by [Harfang Apps](harfang).
+Regis companion is a command-line tool that provides advanced features for the [Regis Mac App][regis] by [Harfang Apps][harfang].
 
 ## Installation Instructions
 
