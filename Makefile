@@ -11,6 +11,6 @@ release:
 	@./bin/regis-companion -version
 	@tar -czf ./bin/regis-companion_${VERSION}_macOS-64bit.tar.gz ./bin/regis-companion
 	@./misc/scripts/version_sha.sh
-	@echo "Upload the archive to the v${VERSION} release on github:"
-	@echo "https://github.com/harfangapps/releases/tag/v${VERSION}"
+	@echo "Upload the archive to the v${VERSION} release on github and publish it:"
+	@echo "https://github.com/harfangapps/regis-companion/releases/tag/v${VERSION}"
 
