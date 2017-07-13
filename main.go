@@ -19,7 +19,7 @@ import (
 
 var (
 	versionFlag           = flag.Bool("version", false, "Print the version.")
-	addrFlag              = flag.String("addr", "127.0.0.1", "Server `address` to bind to.")
+	addrFlag              = flag.String("addr", "127.0.0.1", "The `address` to bind to.")
 	portFlag              = flag.Int("port", 7070, "Port `number` to listen on.")
 	tunnelIdleTimeoutFlag = flag.Duration("tunnel-idle-timeout", 30*time.Minute, "Idle `timeout` for inactive SSH tunnels.")
 	writeTimeoutFlag      = flag.Duration("write-timeout", 30*time.Second, "Write `timeout`.")
