@@ -6,7 +6,7 @@ Regis companion is a command-line tool that provides advanced features for the [
 
 The Regis companion can be installed via [Homebrew][brew] or by downloading a pre-built binary from Github. It is recommended to use Homebrew for a simpler update flow.
 
-It is also recommended to register `regis-companion` as a `launchd` service, see [Running As A launchd Service (RECOMMENDED)][#running-as-a-launchd-service-recommended].
+It is also recommended to register `regis-companion` as a `launchd` service, see [Running As A launchd Service (RECOMMENDED)](#running-as-a-launchd-service-recommended).
 
 ### Using Homebrew (RECOMMENDED)
 
