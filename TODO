@@ -1,6 +1,0 @@
-# TODOs
-
-* Have a good, simple update flow
-  - Regis could check for companion updates and display a message when a new version is available.
-  - Or have regis-companion check it itself, and a command to let Regis know about it?
-
