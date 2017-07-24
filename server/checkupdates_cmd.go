@@ -44,7 +44,7 @@ func (c checkUpdatesCmd) Execute(cmdName string, req []string, s *Server) (inter
 
 	// return true if the release is different than the current version
 	// (ideally, should be later than, but in practice different is enough)
-	return v != Version, nil
+	return v != Version && v != "", nil
 }
 
 func readRelease(r io.Reader) (string, error) {
@@ -56,6 +56,10 @@ func readRelease(r io.Reader) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if len(data) == 0 {
+		return "", nil
+	}
+
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return "", err
 	}
