@@ -5,6 +5,7 @@ import (
 	"expvar"
 	"fmt"
 	"net"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -45,6 +46,9 @@ var (
 
 func init() {
 	supportedCommands = map[string]command{
+		"checkupdates": checkUpdatesCmd{
+			client: &http.Client{Timeout: 10 * time.Second},
+		},
 		"command":       commandCmd{},
 		"gettunneladdr": getTunnelAddrCmd{},
 		"killtunnel":    killTunnelCmd{},
