@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/harfangapps/regis-companion/server"
-	"github.com/harfangapps/regis-companion/sshconfig"
 )
 
 var (
@@ -102,7 +101,7 @@ func main() {
 	}()
 
 	// configure and start the server
-	meta := &sshconfig.MetaConfig{
+	meta := &server.MetaConfig{
 		KnownHostsFile: os.ExpandEnv(*knownHostsFileFlag),
 		SSHDialTimeout: *sshDialTimeoutFlag,
 	}

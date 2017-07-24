@@ -13,7 +13,6 @@ import (
 	"github.com/harfangapps/regis-companion/addr"
 	"github.com/harfangapps/regis-companion/common"
 	"github.com/harfangapps/regis-companion/resp"
-	"github.com/harfangapps/regis-companion/sshconfig"
 	"github.com/harfangapps/regis-companion/tunnel"
 
 	"github.com/pkg/errors"
@@ -78,7 +77,7 @@ type Server struct {
 	// The address the server listens on.
 	Addr net.Addr
 	// The MetaConfig to use to create SSH ClientConfig.
-	MetaConfig *sshconfig.MetaConfig
+	MetaConfig *MetaConfig
 
 	// Duration before the tunnels stop if there is no active connection.
 	TunnelIdleTimeout time.Duration

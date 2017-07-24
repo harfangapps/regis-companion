@@ -1,4 +1,4 @@
-package sshconfig
+package server
 
 import (
 	"errors"

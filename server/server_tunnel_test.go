@@ -13,7 +13,6 @@ import (
 	"github.com/harfangapps/regis-companion/addr"
 	"github.com/harfangapps/regis-companion/internal/testutils"
 	"github.com/harfangapps/regis-companion/resp"
-	"github.com/harfangapps/regis-companion/sshconfig"
 	"github.com/harfangapps/regis-companion/tunnel"
 	"golang.org/x/crypto/ssh"
 )
@@ -101,7 +100,7 @@ func TestGetTunnelAddrTwiceReturnsSameAddr(t *testing.T) {
 
 	srv := &Server{
 		Addr:       tcpAddr,
-		MetaConfig: &sshconfig.MetaConfig{KnownHostsFile: "/dev/null"},
+		MetaConfig: &MetaConfig{KnownHostsFile: "/dev/null"},
 	}
 
 	timeout := 100 * time.Millisecond
@@ -202,7 +201,7 @@ func TestGetTunnelAddrTwiceAfterIdleTimeoutReturnsNewAddr(t *testing.T) {
 
 	srv := &Server{
 		Addr:              tcpAddr,
-		MetaConfig:        &sshconfig.MetaConfig{KnownHostsFile: "/dev/null"},
+		MetaConfig:        &MetaConfig{KnownHostsFile: "/dev/null"},
 		TunnelIdleTimeout: idleTimeout,
 	}
 
@@ -287,7 +286,7 @@ func TestListenFuncError(t *testing.T) {
 
 	srv := &Server{
 		Addr:       tcpAddr,
-		MetaConfig: &sshconfig.MetaConfig{KnownHostsFile: "/dev/null"},
+		MetaConfig: &MetaConfig{KnownHostsFile: "/dev/null"},
 	}
 
 	timeout := 100 * time.Millisecond
@@ -380,7 +379,7 @@ func TestGetTunnelAddrKillTunnel(t *testing.T) {
 	defer setAndDeferSSHDial(mockSSHDial(sshClient))()
 	srv := &Server{
 		Addr:       tcpAddr,
-		MetaConfig: &sshconfig.MetaConfig{KnownHostsFile: "/dev/null"},
+		MetaConfig: &MetaConfig{KnownHostsFile: "/dev/null"},
 	}
 
 	timeout := 100 * time.Millisecond
